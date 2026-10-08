@@ -15,9 +15,9 @@ import (
 )
 
 // Host returns the scheme and host. Host can be configured via the OLLAMA_HOST environment variable.
-// Default is scheme "http" and host "127.0.0.1:11434"
+// Default is scheme "http" and host "127.0.0.1:11435"
 func Host() *url.URL {
-	defaultPort := "11434"
+	defaultPort := "11435"
 
 	s := strings.TrimSpace(Var("OLLAMA_HOST"))
 	scheme, hostport, ok := strings.Cut(s, "://")
@@ -277,7 +277,7 @@ func AsMap() map[string]EnvVar {
 		"OLLAMA_FLASH_ATTENTION":   {"OLLAMA_FLASH_ATTENTION", FlashAttention(false), "Enabled flash attention"},
 		"OLLAMA_KV_CACHE_TYPE":     {"OLLAMA_KV_CACHE_TYPE", KvCacheType(), "Quantization type for the K/V cache (default: f16)"},
 		"OLLAMA_GPU_OVERHEAD":      {"OLLAMA_GPU_OVERHEAD", GpuOverhead(), "Reserve a portion of VRAM per GPU (bytes)"},
-		"OLLAMA_HOST":              {"OLLAMA_HOST", Host(), "IP Address for the ollama server (default 127.0.0.1:11434)"},
+		"OLLAMA_HOST":              {"OLLAMA_HOST", Host(), "IP Address for the allpaca server (default 127.0.0.1:11435)"},
 		"OLLAMA_KEEP_ALIVE":        {"OLLAMA_KEEP_ALIVE", KeepAlive(), "The duration that models stay loaded in memory (default \"5m\")"},
 		"OLLAMA_LLM_LIBRARY":       {"OLLAMA_LLM_LIBRARY", LLMLibrary(), "Set LLM library to bypass autodetection"},
 		"OLLAMA_LOAD_TIMEOUT":      {"OLLAMA_LOAD_TIMEOUT", LoadTimeout(), "How long to allow model loads to stall before giving up (default \"5m\")"},
