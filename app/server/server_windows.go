@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	pidFile       = filepath.Join(os.Getenv("LOCALAPPDATA"), "Ollama", "ollama.pid")
-	serverLogPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "Ollama", "server.log")
+	pidFile       = filepath.Join(os.Getenv("LOCALAPPDATA"), "Allpaca", "allpaca.pid")
+	serverLogPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "Allpaca", "server.log")
 )
 
 func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
@@ -91,7 +91,7 @@ func terminated(pid int) (bool, error) {
 	var exitCode uint32
 	err = windows.GetExitCodeProcess(hProcess, &exitCode)
 	if err != nil {
-		return false, fmt.Errorf("failed to get exit code: %v", err)
+		return false, fmt.Errorf("failed to get exitcode: %v", err)
 	}
 
 	if exitCode == STILL_ACTIVE {
@@ -101,18 +101,18 @@ func terminated(pid int) (bool, error) {
 	return true, nil
 }
 
-// reapServers kills all ollama processes except our own
+// reapServers kills all allpaca processes except our own
 func reapServers() error {
 	// Get current process ID to avoid killing ourselves
 	currentPID := os.Getpid()
 
-	// Use wmic to find ollama processes
-	cmd := exec.Command("wmic", "process", "where", "name='ollama.exe'", "get", "ProcessId")
+	// Use wmic to find allpaca processes
+	cmd := exec.Command("wmic", "process", "where", "name='allpaca.exe'", "get", "ProcessId")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	output, err := cmd.Output()
 	if err != nil {
-		// No ollama processes found
-		slog.Debug("no ollama processes found")
+		// No allpaca processes found
+		slog.Debug("no allpaca processes found")
 		return nil //nolint:nilerr
 	}
 
@@ -141,7 +141,7 @@ func reapServers() error {
 
 		cmd := exec.Command("taskkill", "/F", "/PID", pidStr)
 		if err := cmd.Run(); err != nil {
-			slog.Warn("failed to kill ollama process", "pid", pid, "err", err)
+			slog.Warn("failed to kill allpaca process", "pid", pid, "err", err)
 		}
 	}
 

@@ -260,7 +260,7 @@ func (r *Registry) parseName(name string) (names.Name, error) {
 }
 
 // DefaultRegistry returns a new Registry configured from the environment. The
-// key is read from $HOME/.ollama/id_ed25519, MaxStreams is set to the
+// key is read from $HOME/.allpaca/id_ed25519, MaxStreams is set to the
 // value of OLLAMA_REGISTRY_MAXSTREAMS, and ReadTimeout is set to 30 seconds.
 //
 // It returns an error if any configuration in the environment is invalid.
@@ -269,7 +269,7 @@ func DefaultRegistry() (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	keyPEM, err := os.ReadFile(filepath.Join(home, ".ollama/id_ed25519"))
+	keyPEM, err := os.ReadFile(filepath.Join(home, ".allpaca/id_ed25519"))
 	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}

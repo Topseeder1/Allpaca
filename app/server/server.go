@@ -24,10 +24,10 @@ import (
 
 const restartDelay = time.Second
 
-// Server is a managed ollama server process
+// Server is a managed allpaca server process
 type Server struct {
 	store *store.Store
-	bin   string // resolved path to `ollama`
+	bin   string // resolved path to `allpaca`
 	log   io.WriteCloser
 	dev   bool // true if running with the dev flag
 }
@@ -42,11 +42,29 @@ type InferenceCompute struct {
 }
 
 func New(s *store.Store, devMode bool) *Server {
-	p := resolvePath("ollama")
+	p := resolvePath("allpaca")
+	slog.Info("resolved server binary", "path", p)
 	return &Server{store: s, bin: p, dev: devMode}
 }
 
 func resolvePath(name string) string {
+	// On Windows, os.Stat does not append ".exe" automatically, so
+	// probe both the bare name and the .exe form.
+	candidates := []string{name}
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates, name+".exe")
+	}
+
+	find := func(dir string) string {
+		for _, c := range candidates {
+			p := filepath.Join(dir, c)
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				return p
+			}
+		}
+		return ""
+	}
+
 	// look in the app bundle first
 	if exe, _ := os.Executable(); exe != "" {
 		var dir string
@@ -55,18 +73,18 @@ func resolvePath(name string) string {
 		} else {
 			dir = filepath.Join(filepath.Dir(exe), "..", "Resources")
 		}
-		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return filepath.Join(dir, name)
+		if p := find(dir); p != "" {
+			return p
 		}
 	}
 
 	// check the development dist path
-	for _, path := range []string{
-		filepath.Join("dist", runtime.GOOS, name),
-		filepath.Join("dist", runtime.GOOS+"-"+runtime.GOARCH, name),
+	for _, dir := range []string{
+		filepath.Join("dist", runtime.GOOS),
+		filepath.Join("dist", runtime.GOOS+"-"+runtime.GOARCH),
 	} {
-		if _, err := os.Stat(path); err == nil {
-			return path
+		if p := find(dir); p != "" {
+			return p
 		}
 	}
 
@@ -78,7 +96,7 @@ func resolvePath(name string) string {
 	return name
 }
 
-// cleanup checks the pid file for a running ollama process
+// cleanup checks the pid file for a running allpaca process
 // and shuts it down gracefully if it is running
 func cleanup() error {
 	data, err := os.ReadFile(pidFile)
@@ -108,7 +126,7 @@ func cleanup() error {
 		return nil
 	}
 
-	slog.Info("detected previous ollama process, cleaning up", "pid", pid)
+	slog.Info("detected previous allpaca process, cleaning up", "pid", pid)
 	return stop(proc)
 }
 
@@ -136,7 +154,7 @@ func stop(proc *os.Process) error {
 		default:
 			ok, err := terminated(proc.Pid)
 			if err != nil {
-				slog.Error("error checking if ollama process is terminated", "err", err)
+				slog.Error("error checking if allpaca process is terminated", "err", err)
 				return err
 			}
 			if ok {
@@ -156,7 +174,7 @@ func (s *Server) Run(ctx context.Context) error {
 	defer s.log.Close()
 
 	if err := cleanup(); err != nil {
-		slog.Warn("failed to cleanup previous ollama process", "err", err)
+		slog.Warn("failed to cleanup previous allpaca process", "err", err)
 	}
 
 	reaped := false
@@ -185,15 +203,15 @@ func (s *Server) Run(ctx context.Context) error {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && !s.dev && !reaped {
 				reaped = true
-				// This could be a port conflict, try to kill any existing ollama processes
+				// This could be a port conflict, try to kill any existing allpaca processes
 				if err := reapServers(); err != nil {
-					slog.Warn("failed to stop existing ollama server", "err", err)
+					slog.Warn("failed to stop existing allpaca server", "err", err)
 				} else {
 					slog.Debug("conflicting server stopped, waiting for port to be released")
 					continue
 				}
 			}
-			slog.Error("ollama exited", "err", err)
+			slog.Error("allpaca exited", "err", err)
 		}
 	}
 	return ctx.Err()

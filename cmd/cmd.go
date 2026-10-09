@@ -595,7 +595,7 @@ func RunHandler(cmd *cobra.Command, args []string) error {
 	// If it's an embedding model, handle embedding generation
 	if isEmbeddingModel {
 		if opts.Prompt == "" {
-			return errors.New("embedding models require input text. Usage: ollama run " + name + " \"your text here\"")
+			return errors.New("embedding models require input text. Usage: allpaca run " + name + " \"your text here\"")
 		}
 
 		// Get embedding-specific flags
@@ -615,7 +615,7 @@ func RunHandler(cmd *cobra.Command, args []string) error {
 	// Check if this is an image generation model
 	if slices.Contains(info.Capabilities, model.CapabilityImage) {
 		if opts.Prompt == "" && !interactive {
-			return errors.New("image generation models require a prompt. Usage: ollama run " + name + " \"your prompt here\"")
+			return errors.New("image generation models require a prompt. Usage: allpaca run " + name + " \"your prompt here\"")
 		}
 		return imagegen.RunCLI(cmd, name, opts.Prompt, interactive, opts.KeepAlive)
 	}
@@ -1713,8 +1713,8 @@ func initializeKeypair() error {
 		return err
 	}
 
-	privKeyPath := filepath.Join(home, ".ollama", "id_ed25519")
-	pubKeyPath := filepath.Join(home, ".ollama", "id_ed25519.pub")
+	privKeyPath := filepath.Join(home, ".allpaca", "id_ed25519")
+	pubKeyPath := filepath.Join(home, ".allpaca", "id_ed25519.pub")
 
 	_, err = os.Stat(privKeyPath)
 	if os.IsNotExist(err) {

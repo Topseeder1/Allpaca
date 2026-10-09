@@ -27,7 +27,10 @@ import (
 )
 
 var (
-	UpdateCheckURLBase      = "https://ollama.com/api/update"
+	// Auto-updater disabled — was pointing at ollama.com and pulling Ollama's
+	// installer into our update folder. Do not re-enable without pointing this
+	// at Allpaca's own release feed.
+	UpdateCheckURLBase      = ""
 	UpdateDownloaded        = false
 	UpdateCheckInterval     = 60 * 60 * time.Second
 	UpdateCheckInitialDelay = 3 * time.Second // 30 * time.Second
@@ -248,30 +251,10 @@ type Updater struct {
 }
 
 func (u *Updater) StartBackgroundUpdaterChecker(ctx context.Context, cb func(string) error) {
-	go func() {
-		// Don't blast an update message immediately after startup
-		time.Sleep(UpdateCheckInitialDelay)
-		slog.Info("beginning update checker", "interval", UpdateCheckInterval)
-		for {
-			available, resp := u.checkForUpdate(ctx)
-			if available {
-				err := u.DownloadNewRelease(ctx, resp)
-				if err != nil {
-					slog.Error(fmt.Sprintf("failed to download new release: %s", err))
-				} else {
-					err = cb(resp.UpdateVersion)
-					if err != nil {
-						slog.Warn(fmt.Sprintf("failed to register update available with tray: %s", err))
-					}
-				}
-			}
-			select {
-			case <-ctx.Done():
-				slog.Debug("stopping background update checker")
-				return
-			default:
-				time.Sleep(UpdateCheckInterval)
-			}
-		}
-	}()
+	// Disabled on purpose. This used to poll ollama.com every hour and pull
+	// Ollama's installer into our update folder. Do not re-enable without
+	// pointing it at Allpaca's own release feed.
+	_ = ctx
+	_ = cb
+	return
 }

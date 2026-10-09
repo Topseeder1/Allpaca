@@ -21,7 +21,7 @@ import (
 const (
 	UpdateIconName = "tray_upgrade.ico"
 	IconName       = "tray.ico"
-	ClassName      = "OllamaClass"
+	ClassName      = "AllpacaClass"
 )
 
 func NewTray(app AppCallbacks) (TrayCallbacks, error) {
