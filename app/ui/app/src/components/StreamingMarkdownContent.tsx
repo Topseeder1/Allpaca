@@ -136,6 +136,15 @@ const CodeBlock = React.memo(
   },
 );
 
+interface StreamingMarkdownContentProps {
+  content: string;
+  isStreaming?: boolean;
+  size?: "sm" | "md" | "lg";
+  browserToolResult?: {
+    page_stack: string[];
+  };
+}
+
 const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
   React.memo(({ content, isStreaming = false, size, browserToolResult }) => {
     // Build the remark plugins array - keep default GFM and Math, add citations
