@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,11 @@ import { Field, Label, Description } from "@/components/ui/fieldset";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import {
+  Select,
+  type SelectOption,
+  type SelectSwatch,
+} from "@/components/ui/select";
 import {
   ClaudeDesktopModelsSettings,
   type ClaudeDesktopModelsSettingsHandle,
@@ -31,6 +36,19 @@ import { settingsMutationScope } from "@/lib/settingsMutationScope";
 import { useUser } from "@/hooks/useUser";
 import { invalidateDesktopModels } from "@/lib/desktopModels";
 import { useCloudStatus } from "@/hooks/useCloudStatus";
+import {
+  getTheme,
+  getFont,
+  setTheme,
+  setFont,
+  resolveThemeName,
+  THEME_OPTIONS,
+  FONT_OPTIONS,
+  DEFAULT_THEME,
+  DEFAULT_FONT,
+  type ThemeValue,
+  type FontValue,
+} from "@/lib/appearance";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
 import {
@@ -153,6 +171,12 @@ export default function Settings() {
     useRef<ClaudeDesktopModelsSettingsHandle>(null);
   const codexModelsSettingsRef = useRef<CodexDesktopModelsSettingsHandle>(null);
   const savedConfirmationTimeoutRef = useRef<number | null>(null);
+  const [theme, setThemeState] = useState<ThemeValue>(() => getTheme());
+  const [font, setFontState] = useState<FontValue>(() => getFont());
+  const [themeSwatches, setThemeSwatches] = useState<
+    Record<string, SelectSwatch>
+  >({});
+  const themeProbesRef = useRef<HTMLDivElement>(null);
   useBlocker({
     shouldBlockFn: () =>
       !window.confirm("Discard unapplied app model changes?"),
@@ -287,6 +311,28 @@ export default function Settings() {
       );
   }, []);
 
+  // Read each theme's surface/fg/accent from hidden probe elements so the
+  // Theme dropdown can show swatches for themes that are NOT currently
+  // active. Zero hex duplication — the CSS files remain the single source.
+  useEffect(() => {
+    const container = themeProbesRef.current;
+    if (!container) return;
+    const next: Record<string, SelectSwatch> = {};
+    container
+      .querySelectorAll<HTMLElement>("[data-probe-key]")
+      .forEach((el) => {
+        const key = el.dataset.probeKey;
+        if (!key) return;
+        const cs = getComputedStyle(el);
+        next[key] = {
+          surface: cs.getPropertyValue("--color-surface").trim(),
+          fg: cs.getPropertyValue("--color-fg").trim(),
+          accent: cs.getPropertyValue("--color-accent").trim(),
+        };
+      });
+    setThemeSwatches(next);
+  }, []);
+
   useEffect(() => {
     const handleFocus = () => {
       if (isAwaitingConnection && pollingInterval) {
@@ -388,9 +434,49 @@ export default function Settings() {
     cloudStatus?.source === "env" || cloudStatus?.source === "both";
   const cloudToggleDisabled = cloudOverriddenByEnv;
 
+  const handleThemeChange = useCallback(
+    (value: ThemeValue) => {
+      setTheme(value); // writes localStorage + <html data-theme[-scheme]>
+      setThemeState(value);
+      showSavedConfirmation();
+    },
+    [showSavedConfirmation],
+  );
+
+  const handleFontChange = useCallback(
+    (value: FontValue) => {
+      setFont(value); // writes localStorage + <html data-font>
+      setFontState(value);
+      showSavedConfirmation();
+    },
+    [showSavedConfirmation],
+  );
+
+  const themeSelectOptions = useMemo<SelectOption<ThemeValue>[]>(
+    () =>
+      THEME_OPTIONS.map((opt) => ({
+        value: opt.value,
+        label: opt.label,
+        swatch: themeSwatches[opt.value],
+      })),
+    [themeSwatches],
+  );
+
+  const fontSelectOptions = useMemo<SelectOption<FontValue>[]>(
+    () => FONT_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
+    [],
+  );
+
   const handleResetToDefaults = async () => {
     const cloudSource = cloudStatus?.source;
     if (!settings || resettingToDefaults || !cloudSource) return;
+
+    // Appearance is local-only — reset synchronously, before any async work,
+    // so a later network failure can't leave the UI half-reset.
+    setTheme(DEFAULT_THEME);
+    setThemeState(DEFAULT_THEME);
+    setFont(DEFAULT_FONT);
+    setFontState(DEFAULT_FONT);
 
     setResettingToDefaults(true);
     if (savedConfirmationTimeoutRef.current !== null) {
@@ -492,6 +578,68 @@ export default function Settings() {
           aria-busy={resettingToDefaults}
           className="mx-auto max-w-4xl space-y-4 border-0 p-0"
         >
+          {/* Appearance */}
+          <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800">
+            <div className="space-y-4 p-4">
+              <div className="flex items-center gap-2">
+                <CogIcon className="size-5 text-neutral-500" />
+                <h2 className="text-base font-medium">Appearance</h2>
+              </div>
+
+              <Field>
+                <Label>Theme</Label>
+                <Description>
+                  Colour scheme for the interface. System follows your
+                  operating system.
+                </Description>
+                <Select<ThemeValue>
+                  value={theme}
+                  onChange={handleThemeChange}
+                  options={themeSelectOptions}
+                />
+              </Field>
+
+              <Field>
+                <Label>Font</Label>
+                <Description>
+                  Typeface for the interface. System uses your platform default.
+                </Description>
+                <Select<FontValue>
+                  value={font}
+                  onChange={handleFontChange}
+                  options={fontSelectOptions}
+                />
+              </Field>
+            </div>
+          </div>
+
+          {/*
+            Hidden swatch probes — one per theme. The useEffect above reads
+            --color-surface / --color-fg / --color-accent off each so the
+            dropdown can preview themes that aren't currently active.
+          */}
+          <div
+            ref={themeProbesRef}
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: -9999,
+              top: -9999,
+              width: 0,
+              height: 0,
+              overflow: "hidden",
+              pointerEvents: "none",
+            }}
+          >
+            {THEME_OPTIONS.map((opt) => (
+              <div
+                key={opt.value}
+                data-probe-key={opt.value}
+                data-theme={resolveThemeName(opt.value)}
+              />
+            ))}
+          </div>
+
           {/* Connect Ollama Account */}
           <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800">
             <div className="p-4">

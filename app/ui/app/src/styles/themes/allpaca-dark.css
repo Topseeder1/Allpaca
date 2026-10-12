@@ -1,0 +1,19 @@
+/*
+ * Allpaca Dark — the boot default (see index.html bootstrap scheme map).
+ * Scheme: dark.
+ */
+[data-theme="allpaca-dark"] {
+  color-scheme: dark;
+
+  --color-surface:        #1c1917;
+  --color-surface-raised: #292524;
+  --color-surface-hover:  #3a3633;
+
+  --color-fg:             #fafaf9;
+  --color-fg-muted:       #a8a29e;
+
+  --color-border:         #3f3b38;
+
+  --color-accent:         #f59e0b;
+  --color-accent-fg:      #1c1917;
+}

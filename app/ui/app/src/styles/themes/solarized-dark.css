@@ -1,0 +1,21 @@
+/*
+ * Solarized Dark — canonical Ethan Schoonover values.
+ * Scheme: dark.
+ *
+ * Reference: https://ethanschoonover.com/solarized/
+ */
+[data-theme="solarized-dark"] {
+  color-scheme: dark;
+
+  --color-surface:        #002b36; /* base03 */
+  --color-surface-raised: #073642; /* base02 */
+  --color-surface-hover:  #0e4050; /* derived hover */
+
+  --color-fg:             #93a1a1; /* base1 */
+  --color-fg-muted:       #586e75; /* base01 */
+
+  --color-border:         #073642; /* base02 */
+
+  --color-accent:         #268bd2; /* blue */
+  --color-accent-fg:      #fdf6e3; /* base3 */
+}

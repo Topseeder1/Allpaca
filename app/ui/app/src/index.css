@@ -3,21 +3,44 @@
 @import "katex/dist/katex.min.css";
 @import "./styles/index.css";
 
+/*
+ * dark: variant — keyed off the RESOLVED theme scheme written to <html> by
+ * the inline bootstrap script, not off the OS media query.
+ *
+ * Why: existing components still use raw palette utilities
+ * (bg-white dark:bg-neutral-900 …). Keying dark: off data-theme-scheme
+ * means picking any dark theme flips every dark: utility in the app
+ * immediately — the app responds to theme choice before any component has
+ * been migrated to semantic tokens (Batch 5).
+ *
+ * The `.light-only` exclusion is PRESERVED deliberately: Onboarding.tsx
+ * wraps its content in `.light-only` and hardcodes a light appearance.
+ * Without this exclusion, a user picking a dark theme would see dark:
+ * variants fire on top of that hardcoded white surface.
+ *
+ * "system" is resolved to a concrete theme by the bootstrap script, so
+ * data-theme-scheme is always "light" or "dark" — never absent.
+ */
 @custom-variant dark {
-  @media (prefers-color-scheme: dark) {
+  &:where([data-theme-scheme="dark"], [data-theme-scheme="dark"] *) {
     &:not(.light-only, .light-only *) {
       @slot;
     }
   }
 }
 
-/* --font-* tokens moved to styles/fonts/roles.css — Batch 1 */
+/* --font-* tokens moved to styles/fonts/roles.css  — Batch 1 */
+/* --color-* tokens live in styles/themes/          — Batch 3 */
 
 @layer base {
   :root {
+    /* Browser may render either scheme; each theme file narrows this at
+       runtime via its own color-scheme declaration. */
     color-scheme: light dark;
   }
 
+  /* Onboarding (and anything else opting out of themed styling) — PRESERVED.
+     See the dark: variant above for the matching suppression rule. */
   .light-only {
     color-scheme: light;
   }

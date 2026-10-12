@@ -1,0 +1,19 @@
+/*
+ * Sepia — classic sepia paper with brown ink. Reading-friendly.
+ * Scheme: light.
+ */
+[data-theme="sepia"] {
+  color-scheme: light;
+
+  --color-surface:        #f0e6d2;
+  --color-surface-raised: #e8dcc3;
+  --color-surface-hover:  #ddd0b4;
+
+  --color-fg:             #433422;
+  --color-fg-muted:       #7a6a54;
+
+  --color-border:         #d4c6ab;
+
+  --color-accent:         #8b5a2b;
+  --color-accent-fg:      #f0e6d2;
+}
