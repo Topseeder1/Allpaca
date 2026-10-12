@@ -45,9 +45,13 @@ export interface SelectProps<T extends string = string> {
  * fieldset.tsx; the trigger carries `data-slot="control"` so the Field's
  * margin rules (`[&>[data-slot=label]+[data-slot=control]]:mt-3`) apply.
  *
- * Options render as a swatch chip-row (when `swatch` is provided) followed by
- * the label. Rows without a swatch keep an empty placeholder of the same
- * width so labels stay column-aligned in mixed lists.
+ * NOTE ON GENERICS: Headless UI's Listbox declares two type parameters —
+ * `<TTag extends ElementType, TType = string>`. The FIRST is the `as` tag,
+ * the SECOND is the value type. Passing our value type as the first
+ * parameter (`<Listbox<T>>`) is what caused TS2344. We deliberately pass NO
+ * explicit generic; the value type infers from `value`/`onChange`, keeping
+ * `T` flowing end-to-end (ThemeValue / FontValue narrow at the call site)
+ * without a cast.
  */
 export function Select<T extends string = string>({
   value,
@@ -60,7 +64,7 @@ export function Select<T extends string = string>({
   const selected = options.find((o) => o.value === value);
 
   return (
-    <Headless.Listbox<T> value={value} onChange={onChange} disabled={disabled}>
+    <Headless.Listbox value={value} onChange={onChange} disabled={disabled}>
       <div className={clsx("relative", className)}>
         <Headless.ListboxButton
           {...props}
@@ -68,7 +72,7 @@ export function Select<T extends string = string>({
           className={clsx(
             // Layout
             "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left",
-            // Surface — semantic tokens (Batch 3 vocabulary)
+            // Surface — semantic tokens
             "bg-surface text-fg ring-1 ring-border ring-inset",
             "hover:bg-surface-hover",
             // Focus
@@ -128,8 +132,7 @@ export function Select<T extends string = string>({
                     <SwatchChips swatch={option.swatch} />
                   ) : (
                     // Empty placeholder keeps labels column-aligned across
-                    // mixed swatch / no-swatch lists. Width matches the
-                    // swatch row: 3 × 20px minus 2 × -6px overlap = 48px.
+                    // mixed swatch / no-swatch lists.
                     <span aria-hidden="true" className="w-12 shrink-0" />
                   )}
                   <span className="min-w-0 flex-1">
@@ -160,10 +163,6 @@ export function Select<T extends string = string>({
  * Three overlapping chips previewing an option's surface, foreground, and
  * accent. Decorative only — hidden from the a11y tree; the option's `label`
  * carries the accessible name.
- *
- * Each chip wears a `ring-border` outline so adjacent chips read separately
- * even when the surface and fg colors are close (e.g. high-contrast, where
- * fg is #ffffff against a #000000 surface).
  */
 function SwatchChips({ swatch }: { swatch: SelectSwatch }) {
   return (
