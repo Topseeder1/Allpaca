@@ -1,0 +1,20 @@
+/*
+ * High Contrast — max-contrast dark surface, pure-white foreground,
+ * saturated yellow accent. Targets WCAG AAA.
+ * Scheme: dark.
+ */
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+
+  --color-surface:        #000000;
+  --color-surface-raised: #0a0a0a;
+  --color-surface-hover:  #1a1a1a;
+
+  --color-fg:             #ffffff;
+  --color-fg-muted:       #d4d4d4;
+
+  --color-border:         #ffffff;
+
+  --color-accent:         #ffff00;
+  --color-accent-fg:      #000000;
+}

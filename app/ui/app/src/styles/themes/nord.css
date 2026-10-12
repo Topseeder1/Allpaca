@@ -1,0 +1,21 @@
+/*
+ * Nord — canonical Nord palette hexes (nord0-nord8).
+ * Scheme: dark.
+ *
+ * Reference: https://www.nordtheme.com/docs/colors-and-palettes
+ */
+[data-theme="nord"] {
+  color-scheme: dark;
+
+  --color-surface:        #2e3440; /* nord0 */
+  --color-surface-raised: #3b4252; /* nord1 */
+  --color-surface-hover:  #434c5e; /* nord2 */
+
+  --color-fg:             #eceff4; /* nord6 */
+  --color-fg-muted:       #d8dee9; /* nord4 */
+
+  --color-border:         #4c566a; /* nord3 */
+
+  --color-accent:         #88c0d0; /* nord8 */
+  --color-accent-fg:      #2e3440; /* nord0 */
+}

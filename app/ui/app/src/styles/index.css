@@ -2,13 +2,20 @@
  * Style-tree entrypoint.
  *
  * Import order is deliberate:
- *   1. fonts/roles.css       — role tokens (--font-sans / --font-rounded)
- *   2. fonts/options.css     — stack catalog + html[data-font] selector (Batch 2)
- *   3. themes/_contract.css  — 8 semantic --color-* tokens (defaults)
+ *   1. fonts/roles.css        — role tokens (--font-sans / --font-rounded)
+ *   2. fonts/options.css      — stack catalog + html[data-font] selector
+ *   3. themes/_contract.css   — 8 semantic --color-* tokens (defaults)
+ *   4. themes/*.css           — per-theme overrides keyed by [data-theme]
  *
- * Future batches add (do not create yet):
- *   ./themes/allpaca-dark.css … (Batch 3 — per-theme overrides)
+ * Theme files are imported AFTER the contract so the unlayered
+ * [data-theme="…"] rules beat Tailwind's @layer theme defaults at runtime.
  */
 @import "./fonts/roles.css";
 @import "./fonts/options.css";
 @import "./themes/_contract.css";
+@import "./themes/allpaca-dark.css";
+@import "./themes/allpaca-light.css";
+@import "./themes/sepia.css";
+@import "./themes/high-contrast.css";
+@import "./themes/nord.css";
+@import "./themes/solarized-dark.css";

@@ -5,19 +5,83 @@
     <meta name="color-scheme" content="light dark" />
 
     <!--
-      Font bootstrap — MUST run before the stylesheet link so the chosen font
-      is applied on the very first paint (prevents FOUC). React only READS
-      documentElement.dataset.font at boot; it never re-applies it, which
-      would cause a second flicker. Storage key is namespaced `allpaca:` to
-      avoid collisions. Batch 3 extends this same block with the theme axis.
+      Font + theme bootstrap — MUST run before the stylesheet link so the
+      chosen font/theme is applied on the very first paint (prevents FOUC).
+      React only READS documentElement.dataset.* at boot; it never
+      re-applies them, which would cause a second flicker. Storage keys are
+      namespaced `allpaca:` to avoid collisions.
+
+      Two attributes are written:
+        data-font         — the chosen font stack (from `allpaca:font`)
+        data-theme        — the RESOLVED theme name (from `allpaca:theme`,
+                            with `system` resolved to a concrete value)
+        data-theme-scheme — the resolved light/dark scheme, consumed by the
+                            `dark:` variant in src/index.css
     -->
     <script>
       (function () {
+        var font = "system";
+        var theme = "system";
         try {
-          var font = localStorage.getItem("allpaca:font") || "system";
-          document.documentElement.setAttribute("data-font", font);
+          font = localStorage.getItem("allpaca:font") || "system";
+          theme = localStorage.getItem("allpaca:theme") || "system";
         } catch (e) {
           /* localStorage unavailable (private mode) — defaults apply */
+        }
+
+        document.documentElement.setAttribute("data-font", font);
+
+        // Theme name -> resolved scheme. Must mirror the theme files in
+        // src/styles/themes/. Adding a theme means adding it here too.
+        var schemeMap = {
+          "allpaca-dark": "dark",
+          "allpaca-light": "light",
+          "sepia": "light",
+          "high-contrast": "dark",
+          "nord": "dark",
+          "solarized-dark": "dark",
+        };
+
+        function resolveScheme() {
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches;
+          return prefersDark ? "dark" : "light";
+        }
+
+        function apply(themeName) {
+          var resolved, scheme;
+          if (themeName === "system" || !schemeMap[themeName]) {
+            scheme = resolveScheme();
+            resolved = scheme === "dark" ? "allpaca-dark" : "allpaca-light";
+          } else {
+            resolved = themeName;
+            scheme = schemeMap[themeName];
+          }
+          document.documentElement.setAttribute("data-theme", resolved);
+          document.documentElement.setAttribute("data-theme-scheme", scheme);
+        }
+
+        apply(theme);
+
+        // Re-resolve ONLY when the stored preference is `system`, so OS
+        // theme changes still flow through without React involvement.
+        if (window.matchMedia) {
+          try {
+            window
+              .matchMedia("(prefers-color-scheme: dark)")
+              .addEventListener("change", function () {
+                var stored = "system";
+                try {
+                  stored = localStorage.getItem("allpaca:theme") || "system";
+                } catch (e) {
+                  /* ignore */
+                }
+                if (stored === "system") apply("system");
+              });
+          } catch (e) {
+            /* older browsers — one-shot resolution is fine */
+          }
         }
       })();
     </script>

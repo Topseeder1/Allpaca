@@ -1,0 +1,19 @@
+/*
+ * Allpaca Light — warm cream surface, darkened amber accent.
+ * Scheme: light.
+ */
+[data-theme="allpaca-light"] {
+  color-scheme: light;
+
+  --color-surface:        #faf7f2;
+  --color-surface-raised: #f0ebe2;
+  --color-surface-hover:  #e5ded2;
+
+  --color-fg:             #1c1917;
+  --color-fg-muted:       #78716c;
+
+  --color-border:         #e0d8ca;
+
+  --color-accent:         #b45309;
+  --color-accent-fg:      #faf7f2;
+}
