@@ -1,0 +1,28 @@
+/*
+ * Semantic color contract — the vocabulary every theme is written against.
+ *
+ * RULES:
+ *   1. These 8 names are FROZEN. Renaming is a 50+ component sweep.
+ *   2. ADD new tokens at the bottom. Adding is non-breaking; renaming is not.
+ *   3. Values below reproduce today's light-mode appearance exactly.
+ *      Batch 3 will introduce allpaca-dark as the boot default.
+ *   4. Every theme file overrides these same 8 names under [data-theme="..."].
+ */
+
+@theme {
+  /* --- Surfaces --- */
+  --color-surface:        #ffffff;  /* was: bg-white            */
+  --color-surface-raised: #f5f5f5;  /* was: bg-neutral-100      */
+  --color-surface-hover:  #e5e5e5;  /* was: hover:bg-neutral-100 */
+
+  /* --- Foreground --- */
+  --color-fg:             #0a0a0a;  /* was: text-neutral-950    */
+  --color-fg-muted:       #737373;  /* was: text-neutral-500    */
+
+  /* --- Edges --- */
+  --color-border:         #e5e5e5;  /* was: border-neutral-200  */
+
+  /* --- Brand --- */
+  --color-accent:         #0a0a0a;  /* NEW — placeholder; real value lands with allpaca-dark */
+  --color-accent-fg:      #ffffff;  /* NEW — text on top of accent */
+}
