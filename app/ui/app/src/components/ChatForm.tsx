@@ -710,7 +710,7 @@ function ChatForm({
       {/* File upload error message */}
       {fileUploadError && <ErrorMessage error={fileUploadError} />}
       <div
-        className={`relative mx-auto flex bg-neutral-100 w-full max-w-[768px] flex-col items-center rounded-3xl pb-2 pt-4 dark:bg-neutral-800 dark:border-neutral-700 min-h-[88px] transition-opacity duration-200 ${isDisabled ? "opacity-50" : "opacity-100"}`}
+        className={`relative mx-auto flex bg-surface-raised w-full max-w-[768px] flex-col items-center rounded-3xl pb-2 pt-4 dark:border-border min-h-[88px] transition-opacity duration-200 ${isDisabled ? "opacity-50" : "opacity-100"}`}
       >
         {isDisabled && (
           // overlay to block interaction
@@ -718,7 +718,7 @@ function ChatForm({
         )}
         {editingMessage && (
           <div className="w-full px-5 pb-2">
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            <p className="text-xs text-fg-muted">
               Press ESC to cancel editing
             </p>
           </div>
@@ -728,7 +728,7 @@ function ChatForm({
             {message.attachments.map((attachment, index) => (
               <div
                 key={attachment.id}
-                className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-neutral-50 dark:bg-neutral-700/50 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex-shrink-0"
+                className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-surface hover:bg-surface-hover transition-colors flex-shrink-0"
               >
                 {isImageFile(attachment.filename) ? (
                   <ImageThumbnail
@@ -740,7 +740,7 @@ function ChatForm({
                   />
                 ) : (
                   <svg
-                    className="w-4 h-4 text-neutral-400 dark:text-neutral-500 flex-shrink-0"
+                    className="w-4 h-4 text-fg-muted flex-shrink-0"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -753,13 +753,13 @@ function ChatForm({
                     />
                   </svg>
                 )}
-                <span className="text-sm text-neutral-700 dark:text-neutral-300 max-w-[150px] truncate">
+                <span className="text-sm text-fg max-w-[150px] truncate">
                   {attachment.filename}
                 </span>
                 <button
                   type="button"
                   onClick={() => removeFile(index)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300 -mr-1 cursor-pointer"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-fg-muted hover:text-fg -mr-1 cursor-pointer"
                   aria-label={`Remove ${attachment.filename}`}
                 >
                   <svg
@@ -834,7 +834,7 @@ function ChatForm({
             onChange={handleTextareaChange}
             placeholder="Send a message"
             disabled={isDisabled}
-            className={`allow-context-menu w-full overflow-y-auto text-neutral-700 outline-none resize-none border-none bg-transparent dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 min-h-[24px] leading-6 transition-opacity duration-300 ${
+            className={`allow-context-menu w-full overflow-y-auto text-fg outline-none resize-none border-none bg-transparent placeholder:text-fg-muted min-h-[24px] leading-6 transition-opacity duration-300 ${
               editingMessage ? "animate-fade-in" : ""
             }`}
             rows={1}
@@ -854,10 +854,10 @@ function ChatForm({
                 <button
                   type="button"
                   onClick={handleFilesUpload}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white dark:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer border border-transparent"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-surface focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer border border-transparent"
                   title="Upload multiple files"
                 >
-                  <PlusIcon className="w-4.5 h-4.5 stroke-2 text-neutral-500 dark:text-neutral-400" />
+                  <PlusIcon className="w-4.5 h-4.5 stroke-2 text-fg-muted" />
                 </button>
                 {/* Thinking Level Button */}
                 {modelSupportsThinkingLevels && (
@@ -942,7 +942,7 @@ function ChatForm({
                   shouldShowLoginBanner ||
                   message.fileErrors.length > 0)
               }
-              className={`flex items-center justify-center h-9 w-9 rounded-full disabled:cursor-default cursor-pointer bg-black text-white dark:bg-white dark:text-black disabled:opacity-10 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              className={`flex items-center justify-center h-9 w-9 rounded-full disabled:cursor-default cursor-pointer bg-accent text-accent-fg disabled:opacity-10 focus:outline-none focus:ring-2 focus:ring-accent`}
             >
               {isStreaming || isDownloading ? (
                 <svg

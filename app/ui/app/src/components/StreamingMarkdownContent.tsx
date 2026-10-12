@@ -5,12 +5,24 @@ import CopyButton from "./CopyButton";
 import type { BundledLanguage } from "shiki";
 import { highlighter } from "@/lib/highlighter";
 
-interface StreamingMarkdownContentProps {
-  content: string;
-  isStreaming?: boolean;
-  size?: "sm" | "md" | "lg";
-  browserToolResult?: any; // TODO: proper type
-}
+/**
+ * Colors migrated to the 8-token contract (surface / fg / border …): code
+ * blocks, tables, inline code, citation chips, and prose body/headings/
+ * strong/markers now all follow the active [data-theme].
+ *
+ * Kept deliberately:
+ *   - dark:hidden / hidden dark:block on the twin <pre>s — these are
+ *     STRUCTURAL (they pick which pre renders, light or dark). The dark:
+ *     variant already keys off data-theme-scheme since Batch 3, so this
+ *     split follows every theme's scheme correctly.
+ *   - Shiki one-light / one-dark syntax token colors are inline styles
+ *     keyed to the SCHEME, not the theme: readable on every surface, but
+ *     the syntax palette itself doesn't shift per-theme (separate feature
+ *     if wanted later).
+ *   - `dark:` pairs on tokens were dropped where the token auto-flips
+ *     (e.g. dark:border-neutral-700 next to border-border is redundant —
+ *     --color-border flips itself).
+ */
 
 // Helper to extract text from React nodes
 const extractText = (node: React.ReactNode): string => {
@@ -62,21 +74,21 @@ const CodeBlock = React.memo(
     }, [codeText, language]);
 
     return (
-      <div className="relative bg-neutral-100 dark:bg-neutral-800 rounded-2xl overflow-hidden my-6">
+      <div className="relative bg-surface-raised rounded-2xl overflow-hidden my-6">
         <div className="flex select-none">
           {language && (
-            <div className="text-[13px] text-neutral-500 dark:text-neutral-400 font-mono px-4 py-2">
+            <div className="text-[13px] text-fg-muted font-mono px-4 py-2">
               {language}
             </div>
           )}
           <CopyButton
             content={codeText}
             showLabels={true}
-            className="copy-button text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 ml-auto"
+            className="copy-button text-fg-muted bg-surface-raised ml-auto"
           />
         </div>
         {/* Light mode */}
-        <pre className="dark:hidden m-0 bg-neutral-100 text-sm overflow-x-auto p-4">
+        <pre className="dark:hidden m-0 bg-surface-raised text-sm overflow-x-auto p-4">
           <code className="font-mono text-sm">
             {tokens?.light
               ? tokens.light.map((line: any, i: number) => (
@@ -98,7 +110,7 @@ const CodeBlock = React.memo(
           </code>
         </pre>
         {/* Dark mode */}
-        <pre className="hidden dark:block m-0 bg-neutral-800 text-sm overflow-x-auto p-4">
+        <pre className="hidden dark:block m-0 bg-surface-raised text-sm overflow-x-auto p-4">
           <code className="font-mono text-sm">
             {tokens?.dark
               ? tokens.dark.map((line: any, i: number) => (
@@ -143,14 +155,15 @@ const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
           prose
           prose-neutral
           prose-headings:font-semibold
-          prose:text-neutral-800
+          prose:text-fg
           prose-strong:font-semibold
-          prose-ul:marker:text-neutral-700
-          prose-li:marker:text-neutral-700
-          prose-headings:text-neutral-800
+          prose-strong:text-fg
+          prose-ul:marker:text-fg
+          prose-li:marker:text-fg
+          prose-headings:text-fg
           prose-pre:bg-transparent
           prose-pre:rounded-xl
-          prose-pre:text-neutral-800
+          prose-pre:text-fg
           prose-pre:font-normal
           prose-pre:my-0
           prose-pre:max-w-full
@@ -158,7 +171,7 @@ const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
           [&_table]:border-collapse
           [&_table]:w-full
           [&_table]:border
-          [&_table]:border-neutral-200
+          [&_table]:border-border
           [&_table]:rounded-lg
           [&_table]:overflow-hidden
           [&_th]:px-3
@@ -167,16 +180,16 @@ const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
           [&_th]:font-semibold
           [&_th]:border-b
           [&_th]:border-r
-          [&_th]:border-neutral-200
+          [&_th]:border-border
           [&_th:last-child]:border-r-0
           [&_td]:px-3
           [&_td]:py-2
           [&_td]:border-r
-          [&_td]:border-neutral-200
+          [&_td]:border-border
           [&_td:last-child]:border-r-0
           [&_tbody_tr:not(:last-child)_td]:border-b
-          [&_code:not(pre_code)]:text-neutral-700
-          [&_code:not(pre_code)]:bg-neutral-100
+          [&_code:not(pre_code)]:text-fg
+          [&_code:not(pre_code)]:bg-surface-raised
           [&_code:not(pre_code)]:font-normal
           [&_code:not(pre_code)]:px-1.5
           [&_code:not(pre_code)]:py-0.5
@@ -185,21 +198,8 @@ const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
           [&_code:not(pre_code)]:before:hidden
           [&_code:not(pre_code)]:after:hidden
           dark:prose-invert
-          dark:prose:text-neutral-200
           dark:prose-pre:bg-none
-          dark:prose-headings:text-neutral-200
-          dark:prose-strong:text-neutral-200
-          dark:prose-pre:text-neutral-200
-          dark:prose:pre:text-neutral-200
-          dark:[&_table]:border-neutral-700
-          dark:[&_thead]:bg-neutral-800
-          dark:[&_th]:border-neutral-700
-          dark:[&_td]:border-neutral-700
-          dark:[&_code:not(pre_code)]:text-neutral-200
-          dark:[&_code:not(pre_code)]:bg-neutral-800
-          dark:[&_code:not(pre_code)]:font-normal
-          dark:prose-ul:marker:text-neutral-300
-          dark:prose-li:marker:text-neutral-300
+          dark:[&_thead]:bg-surface-raised
           break-words
         `}
       >
@@ -221,7 +221,7 @@ const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
                 <div className="overflow-x-auto max-w-full">
                   <table
                     {...props}
-                    className="border-collapse w-full border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden"
+                    className="border-collapse w-full border border-border rounded-lg overflow-hidden"
                   >
                     {children}
                   </table>
@@ -253,7 +253,7 @@ const StreamingMarkdownContent: React.FC<StreamingMarkdownContentProps> =
                 };
 
                 const citationElement = (
-                  <span className="text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 rounded-full px-2 py-1 ml-1">
+                  <span className="text-xs text-fg-muted bg-surface-raised rounded-full px-2 py-1 ml-1">
                     [{cursor}]
                   </span>
                 );

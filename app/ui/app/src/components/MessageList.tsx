@@ -113,23 +113,23 @@ export default function MessageList({
 
       {/* Indeterminate loading indicator */}
       {showDots && (
-        <div className="flex items-center space-x-1.5 py-3 mt-2 self-start rounded-full px-4 min-w-0 bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700">
+        <div className="flex items-center space-x-1.5 py-3 mt-2 self-start rounded-full px-4 min-w-0 bg-surface-raised border-border">
           <div
-            className="w-1.5 h-1.5 bg-neutral-400 dark:bg-neutral-500 rounded-full opacity-0"
+            className="w-1.5 h-1.5 bg-fg-muted rounded-full opacity-0"
             style={{
               animation: "typing 1.4s infinite",
               animationDelay: "0s",
             }}
           />
           <div
-            className="w-1.5 h-1.5 bg-neutral-400 dark:bg-neutral-500 rounded-full opacity-0"
+            className="w-1.5 h-1.5 bg-fg-muted rounded-full opacity-0"
             style={{
               animation: "typing 1.4s infinite",
               animationDelay: "0.15s",
             }}
           />
           <div
-            className="w-1.5 h-1.5 bg-neutral-400 dark:bg-neutral-500 rounded-full opacity-0"
+            className="w-1.5 h-1.5 bg-fg-muted rounded-full opacity-0"
             style={{
               animation: "typing 1.4s infinite",
               animationDelay: "0.3s",

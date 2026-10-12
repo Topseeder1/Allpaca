@@ -10,7 +10,7 @@ const styles = {
     // Sizing
     "px-[calc(--spacing(3.5)-1px)] py-[calc(--spacing(2.5)-1px)] sm:px-[calc(--spacing(3)-1px)] sm:py-[calc(--spacing(1.5)-1px)] sm:text-sm/6",
     // Focus
-    "focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-blue-500",
+    "focus:not-data-focus:outline-hidden data-focus:outline-2 data-focus:outline-offset-2 data-focus:outline-accent",
     // Disabled
     "data-disabled:opacity-50",
     // Icon
@@ -41,22 +41,24 @@ const styles = {
     "data-disabled:before:shadow-none data-disabled:after:shadow-none",
   ],
   outline: [
-    // Base
-    "border-zinc-950/10 text-zinc-950 data-active:bg-zinc-950/2.5 data-hover:bg-zinc-950/2.5",
-    // Dark mode
-    "dark:border-white/15 dark:text-white dark:[--btn-bg:transparent] dark:data-active:bg-white/5 dark:data-hover:bg-white/5",
+    // Base — neutral chrome: reads every theme's surfaces/lines (dark: pairs
+    // dropped; the tokens flip themselves under [data-theme])
+    "border-border text-fg data-active:bg-surface-hover data-hover:bg-surface-hover",
+    // Dark mode: transparent btn-bg kept defensive (outline never fills it)
+    "dark:[--btn-bg:transparent]",
     // Icon
-    "[--btn-icon:var(--color-zinc-500)] data-active:[--btn-icon:var(--color-zinc-700)] data-hover:[--btn-icon:var(--color-zinc-700)] dark:data-active:[--btn-icon:var(--color-zinc-400)] dark:data-hover:[--btn-icon:var(--color-zinc-400)]",
+    "[--btn-icon:var(--color-fg-muted)] data-active:[--btn-icon:var(--color-fg)] data-hover:[--btn-icon:var(--color-fg)]",
   ],
   plain: [
     // Base
-    "border-transparent text-zinc-950 data-active:bg-zinc-950/5 data-hover:bg-zinc-950/5",
-    // Dark mode
-    "dark:text-white dark:data-active:bg-white/10 dark:data-hover:bg-white/10",
+    "border-transparent text-fg data-active:bg-surface-hover data-hover:bg-surface-hover",
     // Icon
-    "[--btn-icon:var(--color-zinc-500)] data-active:[--btn-icon:var(--color-zinc-700)] data-hover:[--btn-icon:var(--color-zinc-700)] dark:[--btn-icon:var(--color-zinc-500)] dark:data-active:[--btn-icon:var(--color-zinc-400)] dark:data-hover:[--btn-icon:var(--color-zinc-400)]",
+    "[--btn-icon:var(--color-fg-muted)] data-active:[--btn-icon:var(--color-fg)] data-hover:[--btn-icon:var(--color-fg)]",
   ],
   colors: {
+    // NAMED COLOR BUTTONS ARE DELIBERATELY UNTOUCHED — they are brand/status
+    // choices (red, green, indigo…) or intentional neutral solids (zinc,
+    // white, dark…). Per the contract, only chrome theming applies here.
     "dark/zinc": [
       "text-white [--btn-bg:var(--color-zinc-900)] [--btn-border:var(--color-zinc-950)]/90 [--btn-hover-overlay:var(--color-white)]/10",
       "dark:text-white dark:[--btn-bg:var(--color-zinc-600)] dark:[--btn-hover-overlay:var(--color-white)]/5",

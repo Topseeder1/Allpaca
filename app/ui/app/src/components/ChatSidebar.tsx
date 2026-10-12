@@ -267,8 +267,8 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         <Link
           href="/c/new"
           mask={{ to: "/" }}
-          className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:text-neutral-100 ${
-            currentChatId === "new" ? "bg-neutral-100 dark:bg-neutral-800" : ""
+          className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-fg hover:bg-surface-hover ${
+            currentChatId === "new" ? "bg-surface-hover" : ""
           }`}
           draggable={false}
         >
@@ -286,7 +286,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         {isWindows && (
           <Link
             href="/settings"
-            className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:text-neutral-300`}
+            className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-fg hover:bg-surface-hover`}
             draggable={false}
           >
             <CogIcon className="h-5 w-5 stroke-current" />
@@ -298,15 +298,15 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         <div className="flex flex-col gap-3 pt-4">
           {chatGroups.map((group) => (
             <div key={group.name} className="flex flex-col gap-0.5">
-              <h3 className="text-xs font-medium text-neutral-400 dark:text-neutral-500 px-2 py-1 select-none">
+              <h3 className="text-xs font-medium text-fg-muted px-2 py-1 select-none">
                 {group.name}
               </h3>
               {group.chats.map((chat) => (
                 <div
                   key={chat.id}
-                  className={`allow-context-menu flex items-center relative text-sm text-neutral-800 dark:text-neutral-400 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+                  className={`allow-context-menu flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
                     chat.id === currentChatId
-                      ? "bg-neutral-100 text-black dark:bg-neutral-800"
+                      ? "bg-surface-hover text-fg"
                       : ""
                   }`}
                   onMouseEnter={() => handleMouseEnter(chat.id)}
@@ -321,7 +321,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
                   }
                 >
                   {editingChatId === chat.id ? (
-                    <div className="flex-1 flex items-center min-w-0 px-2 py-2 bg-neutral-100 text-black dark:bg-neutral-800 rounded-lg">
+                    <div className="flex-1 flex items-center min-w-0 px-2 py-2 bg-surface-hover text-fg rounded-lg">
                       <span className="truncate font-sans text-sm w-full">
                         <input
                           ref={inputRef}
@@ -337,7 +337,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
                               setEditValue("");
                             }
                           }}
-                          className="bg-transparent border-0 focus:outline-none w-full dark:text-white"
+                          className="bg-transparent border-0 focus:outline-none w-full"
                           style={{
                             font: "inherit",
                             lineHeight: "inherit",

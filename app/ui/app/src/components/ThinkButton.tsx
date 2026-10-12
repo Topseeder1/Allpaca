@@ -75,10 +75,8 @@ export const ThinkButton = forwardRef<HTMLButtonElement, ThinkButtonProps>(
           ref={ref}
           title={isActive ? "Disable think mode" : "Enable think mode"}
           onClick={onToggle}
-          className={`select-none flex items-center justify-center rounded-full h-9 w-9 bg-white dark:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all whitespace-nowrap border border-transparent ${
-            isActive
-              ? "text-[rgba(0,115,255,1)] dark:text-[rgba(70,155,255,1)]"
-              : "text-neutral-500 dark:text-neutral-400"
+          className={`select-none flex items-center justify-center rounded-full h-9 w-9 bg-surface focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer transition-all whitespace-nowrap border border-transparent ${
+            isActive ? "text-accent" : "text-fg-muted"
           }`}
         >
           <svg
@@ -107,7 +105,7 @@ export const ThinkButton = forwardRef<HTMLButtonElement, ThinkButtonProps>(
             setIsDropdownOpen(newState);
             onDropdownToggle?.(newState);
           }}
-          className={`select-none flex items-center justify-center gap-1 rounded-full h-9 px-3 bg-white dark:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all whitespace-nowrap border border-transparent text-[rgba(0,115,255,1)] dark:text-[rgba(70,155,255,1)]`}
+          className={`select-none flex items-center justify-center gap-1 rounded-full h-9 px-3 bg-surface focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer transition-all whitespace-nowrap border border-transparent text-accent`}
         >
           <div className="justify-center items-center flex space-x-2">
             <svg
@@ -136,14 +134,12 @@ export const ThinkButton = forwardRef<HTMLButtonElement, ThinkButtonProps>(
         </button>
 
         {isDropdownOpen && (
-          <div className="absolute bottom-full mb-2 text-[15px] rounded-2xl overflow-hidden bg-white border border-neutral-100 text-neutral-800 shadow-xl shadow-black/5 backdrop-blur-lg dark:border-neutral-600/40 dark:bg-neutral-800 dark:text-white dark:ring-black/20 min-w-[120px]">
+          <div className="absolute bottom-full mb-2 text-[15px] rounded-2xl overflow-hidden bg-surface-raised border border-border text-fg shadow-xl shadow-black/5 backdrop-blur-lg dark:ring-black/20 min-w-[120px]">
             {Object.entries(THINKING_LEVELS).map(([, level]) => (
               <button
                 key={level}
-                className={`w-full text-left px-3 py-2 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors text-neutral-700 dark:text-neutral-300 ${
-                  currentLevel === level
-                    ? "bg-neutral-100 dark:bg-neutral-700/60"
-                    : ""
+                className={`w-full text-left px-3 py-2 cursor-pointer hover:bg-surface-hover transition-colors text-fg ${
+                  currentLevel === level ? "bg-surface-hover" : ""
                 }`}
                 onClick={() => {
                   onLevelChange?.(level);

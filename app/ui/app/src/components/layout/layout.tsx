@@ -13,16 +13,16 @@ export function SidebarLayout({
   const isWindows = navigator.platform.toLowerCase().includes("win");
 
   return (
-    <div className={`flex transition-[width] duration-300 dark:bg-neutral-900`}>
+    <div className="flex transition-[width] duration-300">
       <div
-        className={`absolute flex mx-2 py-2 z-20 items-center transition-[left] duration-375 text-neutral-500 dark:text-neutral-400 ${settings.sidebarOpen ? (isWindows ? "left-2" : "left-[204px]") : isWindows ? "left-2" : "left-20"}`}
+        className={`absolute flex mx-2 py-2 z-20 items-center transition-[left] duration-375 text-fg-muted ${settings.sidebarOpen ? (isWindows ? "left-2" : "left-[204px]") : isWindows ? "left-2" : "left-20"}`}
       >
         <button
           onClick={() => setSettings({ SidebarOpen: !settings.sidebarOpen })}
           onMouseDown={(e) => {
             e.stopPropagation();
           }}
-          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-700/75 cursor-pointer"
+          className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-surface-hover cursor-pointer"
           aria-label={settings.sidebarOpen ? "Hide sidebar" : "Show sidebar"}
           title={settings.sidebarOpen ? "Hide sidebar" : "Show sidebar"}
         >
@@ -39,7 +39,7 @@ export function SidebarLayout({
           to="/c/$chatId"
           params={{ chatId: "new" }}
           title="New chat"
-          className={`flex ml-1 items-center justify-center rounded-full transition-opacity duration-375 h-9 w-9 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+          className={`flex ml-1 items-center justify-center rounded-full transition-opacity duration-375 h-9 w-9 hover:bg-surface-hover ${
             settings.sidebarOpen
               ? "opacity-0 pointer-events-none"
               : "opacity-100"
@@ -70,7 +70,7 @@ export function SidebarLayout({
         className={`flex flex-1 flex-col min-w-0 transition-all duration-300`}
       >
         <div
-          className={`h-13 flex-none w-full z-10 flex items-center bg-white dark:bg-neutral-900 ${isWindows ? "xl:hidden" : "xl:fixed xl:bg-transparent xl:dark:bg-transparent"}`}
+          className={`h-13 flex-none w-full z-10 flex items-center bg-surface ${isWindows ? "xl:hidden" : "xl:fixed xl:bg-transparent"}`}
           onDoubleClick={() => window.doubleClick && window.doubleClick()}
           onMouseDown={() => window.drag && window.drag()}
         ></div>

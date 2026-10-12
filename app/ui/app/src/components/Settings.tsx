@@ -337,7 +337,7 @@ export default function Settings() {
   }
 
   return (
-    <main className="flex min-h-0 w-full flex-1 flex-col select-none dark:bg-neutral-900">
+    <main className="flex min-h-0 w-full flex-1 flex-col select-none bg-surface">
       <div className="w-full p-6 overflow-y-auto flex-1 overscroll-contain">
         <fieldset
           disabled={resettingToDefaults}
@@ -345,10 +345,10 @@ export default function Settings() {
           className="mx-auto max-w-4xl space-y-4 border-0 p-0"
         >
           {/* Appearance */}
-          <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800">
+          <div className="overflow-hidden rounded-xl bg-surface-raised">
             <div className="space-y-4 p-4">
               <div className="flex items-center gap-2">
-                <CogIcon className="size-5 text-neutral-500" />
+                <CogIcon className="size-5 text-fg-muted" />
                 <h2 className="text-base font-medium">Appearance</h2>
               </div>
 
@@ -407,27 +407,27 @@ export default function Settings() {
           </div>
 
           {/* Connect Ollama Account */}
-          <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800">
+          <div className="overflow-hidden rounded-xl bg-surface-raised">
             <div className="p-4">
               <Field>
                 {isLoading ? (
                   // Loading skeleton, this will only happen if the app started recently
                   <div className="flex items-center justify-between">
                     <div className="space-y-2">
-                      <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded animate-pulse w-24"></div>
-                      <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded animate-pulse w-32"></div>
+                      <div className="h-4 bg-border rounded animate-pulse w-24"></div>
+                      <div className="h-3 bg-border rounded animate-pulse w-32"></div>
                     </div>
-                    <div className="h-10 w-10 bg-neutral-200 dark:bg-neutral-700 rounded-full animate-pulse"></div>
+                    <div className="h-10 w-10 bg-border rounded-full animate-pulse"></div>
                   </div>
                 ) : user && user.name ? (
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <Label className="text-sm font-medium text-neutral-900 dark:text-white">
+                        <Label className="text-sm font-medium text-fg">
                           {user?.name}
                         </Label>
                       </div>
-                      <Description className="text-sm text-neutral-500 dark:text-neutral-400">
+                      <Description className="text-sm text-fg-muted">
                         {user?.email}
                       </Description>
                       <div className="flex items-center space-x-2 mt-2">
@@ -474,7 +474,7 @@ export default function Settings() {
                       <img
                         src={user.avatarurl}
                         alt={user?.name}
-                        className="h-10 w-10 rounded-full bg-neutral-200 dark:bg-neutral-700 flex-shrink-0"
+                        className="h-10 w-10 rounded-full bg-border flex-shrink-0"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.className = "hidden";
@@ -514,13 +514,13 @@ export default function Settings() {
           </div>
 
           {/* Local Configuration */}
-          <div className="relative overflow-hidden rounded-xl bg-white dark:bg-neutral-800">
+          <div className="relative overflow-hidden rounded-xl bg-surface-raised">
             <div className="space-y-4 p-4">
               {/* Expose Ollama */}
               <Field>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start space-x-3 flex-1">
-                    <WifiIcon className="mt-1 h-5 w-5 flex-shrink-0 text-black dark:text-neutral-100" />
+                    <WifiIcon className="mt-1 h-5 w-5 flex-shrink-0 text-fg" />
                     <div>
                       <Label>Expose Ollama to the network</Label>
                       <Description>
@@ -540,7 +540,7 @@ export default function Settings() {
               {/* Model Directory */}
               <Field>
                 <div className="flex items-start space-x-3">
-                  <FolderIcon className="mt-1 h-5 w-5 flex-shrink-0 text-black dark:text-neutral-100" />
+                  <FolderIcon className="mt-1 h-5 w-5 flex-shrink-0 text-fg" />
                   <div className="w-full">
                     <Label>Model location</Label>
                     <Description>Location where models are stored.</Description>
@@ -582,7 +582,7 @@ export default function Settings() {
               {/* Context Length */}
               <Field>
                 <div className="flex items-start space-x-3">
-                  <CogIcon className="mt-1 h-5 w-5 flex-shrink-0 text-black dark:text-neutral-100" />
+                  <CogIcon className="mt-1 h-5 w-5 flex-shrink-0 text-fg" />
                   <div className="w-full">
                     <Label>Context length</Label>
                     <Description>
@@ -614,12 +614,12 @@ export default function Settings() {
 
           {/* Agent Mode */}
           {window.OLLAMA_TOOLS && (
-            <div className="overflow-hidden rounded-xl bg-white dark:bg-neutral-800">
+            <div className="overflow-hidden rounded-xl bg-surface-raised">
               <div className="space-y-4 p-4">
                 <Field>
                   <div className="flex items-center justify-between">
                     <div className="flex items-start space-x-3">
-                      <BoltIcon className="mt-1 h-5 w-5 flex-shrink-0 text-black dark:text-neutral-100" />
+                      <BoltIcon className="mt-1 h-5 w-5 flex-shrink-0 text-fg" />
                       <div>
                         <Label>Enable Agent Mode</Label>
                         <Description>
@@ -638,7 +638,7 @@ export default function Settings() {
                 <Field>
                   <div className="flex items-center justify-between">
                     <div className="flex items-start space-x-3">
-                      <WrenchIcon className="mt-1 h-5 w-5 flex-shrink-0 text-black dark:text-neutral-100" />
+                      <WrenchIcon className="mt-1 h-5 w-5 flex-shrink-0 text-fg" />
                       <div>
                         <Label>Enable Tools Mode</Label>
                         <Description>

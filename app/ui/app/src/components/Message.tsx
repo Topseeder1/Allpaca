@@ -156,9 +156,8 @@ function BrowserToolResult({
 
   return (
     <div
-      className={`flex flex-col w-full ${!isCollapsed ? "text-neutral-800 dark:text-neutral-200" : "text-neutral-600 dark:text-neutral-400"}
-         hover:text-neutral-800
-        dark:hover:text-neutral-200 transition-colors`}
+      className={`flex flex-col w-full ${!isCollapsed ? "text-fg" : "text-fg-muted"}
+         hover:text-fg transition-colors`}
     >
       <div
         className="flex cursor-pointer group/browser self-start relative"
@@ -211,11 +210,11 @@ function BrowserToolResult({
             <InlineSearchTerm term={processedContent.title} />
           )}
           {urlToUse != null && (
-            <span className="text-neutral-500 text-sm ml-2 break-all">
+            <span className="text-fg-muted text-sm ml-2 break-all">
               ({urlToUse})
             </span>
           )}
-          <span className="text-neutral-500 text-sm ml-2">
+          <span className="text-fg-muted text-sm ml-2">
             (lines {processedContent.startingLine}-
             {processedContent.startingLine + processedContent.lines.length - 1}{" "}
             of {processedContent.totalLines})
@@ -223,7 +222,7 @@ function BrowserToolResult({
         </div>
       </div>
       <div
-        className={`text-xs text-neutral-500 dark:text-neutral-500 rounded-md overflow-y-auto
+        className={`text-xs text-fg-muted rounded-md overflow-y-auto
           transition-[max-height,opacity] duration-300 ease-in-out ml-6 mt-2`}
         style={{
           maxHeight: isCollapsed ? "0px" : "20rem",
@@ -239,7 +238,7 @@ function BrowserToolResult({
                   key={index}
                   className="flex whitespace-nowrap text-xs h-[2em] font-mono"
                 >
-                  <div className="w-10 text-right pr-2 text-neutral-500 flex-shrink-0 border-r border-neutral-200 dark:border-neutral-700">
+                  <div className="w-10 text-right pr-2 text-fg-muted flex-shrink-0 border-r border-border">
                     {lineNumber}
                   </div>
                   <div className="pl-2 pr-4">{line}</div>
@@ -276,13 +275,13 @@ function ToolRoleContent({
     // collapsable tool result with raw json
     <div className="space-y-2">
       {content && !rawToolResult && (
-        <pre className="text-xs whitespace-pre-wrap overflow-x-auto bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 p-2 rounded-md max-h-40">
+        <pre className="text-xs whitespace-pre-wrap overflow-x-auto bg-surface-raised text-fg p-2 rounded-md max-h-40">
           <code>{content}</code>
         </pre>
       )}
 
       {rawToolResult && (
-        <div className="flex flex-col w-full text-neutral-600 dark:text-neutral-400 relative select-text hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors">
+        <div className="flex flex-col w-full text-fg-muted relative select-text hover:text-fg transition-colors">
           <div
             className="flex cursor-pointer group/browser self-start relative"
             onClick={() => setIsCollapsed(!isCollapsed)}
@@ -356,7 +355,7 @@ function ToolRoleContent({
           </div>
 
           <div
-            className="text-xs text-neutral-500 dark:text-neutral-500 rounded-md overflow-y-auto transition-[max-height,opacity] duration-300 ease-in-out ml-6 mt-2"
+            className="text-xs text-fg-muted rounded-md overflow-y-auto transition-[max-height,opacity] duration-300 ease-in-out ml-6 mt-2"
             style={{
               maxHeight: isCollapsed ? "0px" : "20rem",
               opacity: isCollapsed ? 0 : 1,
@@ -364,7 +363,7 @@ function ToolRoleContent({
           >
             <pre
               id="raw-json-tool-result"
-              className="text-xs overflow-x-auto bg-neutral-50 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 p-2 rounded-md border border-neutral-200 dark:border-neutral-700"
+              className="text-xs overflow-x-auto bg-surface-raised text-fg p-2 rounded-md border border-border"
             >
               <code>
                 {typeof rawToolResult === "string"
@@ -417,7 +416,7 @@ function cursorToPage(
   const pageText = cursorToPageText(cursor, browserToolResult);
 
   return (
-    <span className="font-medium text-sm text-neutral-500 border border-neutral-200 dark:border-neutral-700 rounded-md px-1 py-0.5">
+    <span className="font-medium text-sm text-fg-muted border border-border rounded-md px-1 py-0.5">
       {pageText}
     </span>
   );
@@ -435,7 +434,7 @@ function BrowserToolCallDisplay({
   if (toolCall.function.name === "browser.search") {
     const query = args.query;
     return (
-      <div className="text-neutral-600 dark:text-neutral-400 relative mb-3 select-text">
+      <div className="text-fg-muted relative mb-3 select-text">
         <svg
           className="fill-current h-4 absolute top-1"
           viewBox="0 0 18 18"
@@ -456,7 +455,7 @@ function BrowserToolCallDisplay({
 
     if (idAllNumeric) {
       return (
-        <div className="text-neutral-600 dark:text-neutral-400 relative mb-3 select-text">
+        <div className="text-fg-muted relative mb-3 select-text">
           <svg
             className="fill-current h-4 absolute top-1"
             viewBox="0 0 18 18"
@@ -472,7 +471,7 @@ function BrowserToolCallDisplay({
     } else {
       const loc = args.loc;
       return (
-        <div className="text-neutral-600 dark:text-neutral-400 relative mb-3 select-text">
+        <div className="text-fg-muted relative mb-3 select-text">
           <svg
             className="fill-current h-4 absolute top-1"
             viewBox="0 0 18 18"
@@ -496,7 +495,7 @@ function BrowserToolCallDisplay({
     const pattern = args.pattern;
 
     return (
-      <div className="text-neutral-600 dark:text-neutral-400 relative mb-3 select-text">
+      <div className="text-fg-muted relative mb-3 select-text">
         <svg
           className="fill-current h-4 absolute top-1"
           viewBox="0 0 18 18"
@@ -541,7 +540,7 @@ function ToolCallDisplay({
     }
     const query = args && typeof args.query === "string" ? args.query : "";
     return (
-      <div className="text-neutral-600 dark:text-neutral-400 relative select-text">
+      <div className="text-fg-muted relative select-text">
         {/*  Magnifying Glass Icon */}
         <svg
           className="fill-current h-4 absolute top-1"
@@ -567,7 +566,7 @@ function ToolCallDisplay({
     }
     const url = args && typeof args.url === "string" ? args.url : "";
     return (
-      <div className="text-neutral-600 dark:text-neutral-400 relative select-text">
+      <div className="text-fg-muted relative select-text">
         {/* Magnifying Glass Icon */}
         <svg
           className="fill-current h-4 absolute top-1"
@@ -611,7 +610,7 @@ function ToolCallDisplay({
     }
 
     return (
-      <div className="text-neutral-600 dark:text-neutral-400 relative select-text">
+      <div className="text-fg-muted relative select-text">
         <svg
           className="h-4 w-4 absolute top-1.5"
           viewBox="0 0 24 24"
@@ -677,9 +676,8 @@ function ToolCallDisplay({
 
   return (
     <div
-      className={`flex flex-col w-full ${!isCollapsed ? "text-neutral-800 dark:text-neutral-200" : "text-neutral-600 dark:text-neutral-400"}
-         hover:text-neutral-800
-        dark:hover:text-neutral-200 transition-colors`}
+      className={`flex flex-col w-full ${!isCollapsed ? "text-fg" : "text-fg-muted"}
+         hover:text-fg transition-colors`}
     >
       <div
         className="flex items-center cursor-pointer group/tool self-start relative"
@@ -719,17 +717,13 @@ function ToolCallDisplay({
         <h3 className="ml-6 font-mono text-sm">
           <span className="font-semibold">{toolCall.function.name}</span>
           {isCollapsed && parsedArgs && (
-            <span className="text-neutral-500 dark:text-neutral-500 ml-1">
-              ({getArgsPreview()})
-            </span>
+            <span className="text-fg-muted ml-1">({getArgsPreview()})</span>
           )}
-          <span className="text-neutral-500 dark:text-neutral-500 ml-2 text-xs">
-            {toolCall.type}
-          </span>
+          <span className="text-fg-muted ml-2 text-xs">{toolCall.type}</span>
         </h3>
       </div>
       <div
-        className={`text-xs text-neutral-500 dark:text-neutral-500 rounded-md
+        className={`text-xs text-fg-muted rounded-md
           transition-[max-height,opacity] duration-300 ease-in-out ml-6 mt-2`}
         style={{
           maxHeight: isCollapsed ? "0px" : "40rem",
@@ -739,11 +733,11 @@ function ToolCallDisplay({
         <div className="transition-transform duration-300 opacity-75">
           {parsedArgs && (
             <div className="mb-4">
-              <div className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1">
+              <div className="text-xs font-semibold text-fg-muted mb-1">
                 Arguments:
               </div>
-              <pre className="text-xs bg-neutral-100 dark:bg-neutral-800 p-2 rounded overflow-x-auto">
-                <code className="text-neutral-800 dark:text-neutral-200">
+              <pre className="text-xs bg-surface-raised p-2 rounded overflow-x-auto">
+                <code className="text-fg">
                   {typeof parsedArgs === "object"
                     ? JSON.stringify(parsedArgs, null, 2)
                     : parsedArgs}
@@ -754,11 +748,11 @@ function ToolCallDisplay({
 
           {toolCall.function.result && (
             <div>
-              <div className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 mb-1">
+              <div className="text-xs font-semibold text-fg-muted mb-1">
                 Result:
               </div>
-              <pre className="text-xs bg-neutral-100 dark:bg-neutral-800 p-2 rounded overflow-x-auto max-h-40">
-                <code className="text-neutral-800 dark:text-neutral-200">
+              <pre className="text-xs bg-surface-raised p-2 rounded overflow-x-auto max-h-40">
+                <code className="text-fg">
                   {typeof toolCall.function.result === "object"
                     ? JSON.stringify(toolCall.function.result, null, 2)
                     : toolCall.function.result}
@@ -811,8 +805,8 @@ function UserMessage({
 
       <div className="message-container mb-8 max-w-md self-end">
         <div
-          className="message rounded-3xl bg-neutral-100 px-4 py-2 leading-normal
-                    dark:bg-neutral-700 dark:text-white group/message relative"
+          className="message rounded-3xl bg-surface-raised px-4 py-2 leading-normal text-fg
+                    group/message relative"
           data-role="user"
         >
           {/* Show non-image attachments inside the message */}
@@ -828,10 +822,10 @@ function UserMessage({
                   .map((attachment: File, index: number) => (
                     <div
                       key={`file-attachment-${index}`}
-                      className="flex items-center gap-2 py-1 px-2 rounded-lg bg-neutral-50 dark:bg-neutral-600/50 transition-colors flex-shrink-0"
+                      className="flex items-center gap-2 py-1 px-2 rounded-lg bg-surface-hover transition-colors flex-shrink-0"
                     >
                       <svg
-                        className="w-3 h-3 text-neutral-400 dark:text-neutral-500 flex-shrink-0"
+                        className="w-3 h-3 text-fg-muted flex-shrink-0"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -843,7 +837,7 @@ function UserMessage({
                           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                         />
                       </svg>
-                      <span className="text-xs text-neutral-600 dark:text-neutral-400 max-w-[120px] truncate">
+                      <span className="text-xs text-fg-muted max-w-[120px] truncate">
                         {attachment.filename}
                       </span>
                     </div>
@@ -862,7 +856,7 @@ function UserMessage({
                      ${
                        isFaded
                          ? "opacity-30"
-                         : "opacity-0 group-hover/message:opacity-100 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 cursor-pointer"
+                         : "opacity-0 group-hover/message:opacity-100 text-fg-muted hover:text-fg cursor-pointer"
                      }`}
             onClick={isFaded ? undefined : handleEdit}
           >
@@ -980,7 +974,7 @@ function OtherRoleMessage({
               removeClasses={["copy-button"]}
               size="md"
               showLabels={false}
-              className="copy-button z-10 text-neutral-500 dark:text-neutral-400"
+              className="copy-button z-10 text-fg-muted"
               title="Copy"
             />
           </div>

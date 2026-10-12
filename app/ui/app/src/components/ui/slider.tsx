@@ -80,7 +80,7 @@ const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
       <div className="space-y-2" ref={ref}>
         {label && <label className="text-sm font-medium">{label}</label>}
         <div className="relative">
-          <div className="absolute top-[9px] left-2 right-2 h-1 bg-neutral-200 dark:bg-neutral-700 pointer-events-none rounded-full" />
+          <div className="absolute top-[9px] left-2 right-2 h-1 bg-border pointer-events-none rounded-full" />
 
           <div className="flex justify-between" ref={containerRef}>
             {options.map((option) => (
@@ -92,11 +92,11 @@ const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
                 >
                   <div className="relative w-5 h-5 flex items-center justify-center">
                     {selectedValue === option.value && (
-                      <div className="w-4 h-4 bg-white dark:bg-white border border-neutral-400 dark:border-neutral-500 rounded-full cursor-grab active:cursor-grabbing" />
+                      <div className="w-4 h-4 bg-surface border border-border rounded-full cursor-grab active:cursor-grabbing" />
                     )}
                   </div>
                 </button>
-                <div className="text-xs mt text-neutral-500 dark:text-neutral-400">
+                <div className="text-xs mt text-fg-muted">
                   {option.label}
                 </div>
               </div>
