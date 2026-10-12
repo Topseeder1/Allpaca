@@ -177,7 +177,7 @@ export const ModelPicker = forwardRef<
         }}
         onMouseDown={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
-        className="flex items-center select-none gap-1.5 rounded-full px-3.5 py-1.5 bg-white dark:bg-neutral-700 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-neutral-100 cursor-pointer"
+        className="flex items-center select-none gap-1.5 rounded-full px-3.5 py-1.5 bg-surface text-fg focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <span>
@@ -201,8 +201,8 @@ export const ModelPicker = forwardRef<
         </svg>
       </button>
       {isOpen && (
-        <div className="absolute right-0 text-[15px] bottom-full mb-2 z-50 w-64 rounded-2xl overflow-hidden bg-white border border-neutral-100 text-neutral-800 shadow-xl shadow-black/5 backdrop-blur-lg dark:border-neutral-600/40 dark:bg-neutral-800 dark:text-white dark:ring-black/20">
-          <div className="px-1 py-2 border-b border-neutral-100 dark:border-neutral-700">
+        <div className="absolute right-0 text-[15px] bottom-full mb-2 z-50 w-64 rounded-2xl overflow-hidden bg-surface-raised border border-border text-fg shadow-xl shadow-black/5 backdrop-blur-lg dark:ring-black/20">
+          <div className="px-1 py-2 border-b border-border">
             <input
               ref={searchInputRef}
               type="text"
@@ -210,7 +210,7 @@ export const ModelPicker = forwardRef<
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Find model..."
               autoCorrect="off"
-              className="w-full px-2 py-0.5 bg-transparent border-none border-neutral-200 rounded-md outline-none focus:border-neutral-400 dark:border-neutral-600 dark:focus:border-neutral-400"
+              className="w-full px-2 py-0.5 bg-transparent border-none border-border rounded-md outline-none focus:border-fg/25"
             />
           </div>
 
@@ -317,7 +317,7 @@ export const ModelList = forwardRef(function ModelList(
       className="h-64 overflow-y-auto overflow-x-hidden"
     >
       {models.length === 0 ? (
-        <div className="px-3 py-2 text-neutral-500 dark:text-neutral-400">
+        <div className="px-3 py-2 text-fg-muted">
           No models found
         </div>
       ) : (
@@ -327,10 +327,10 @@ export const ModelList = forwardRef(function ModelList(
               <button
                 onClick={() => onModelSelect(model)}
                 onMouseEnter={() => setHighlightedIndex(index)}
-                className={`flex w-full items-center gap-2 px-3 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-700/60 focus:outline-none cursor-pointer ${
+                className={`flex w-full items-center gap-2 px-3 py-2 hover:bg-surface-hover focus:outline-none cursor-pointer ${
                   highlightedIndex === index ||
                   selectedModel?.model === model.model
-                    ? "bg-neutral-100 dark:bg-neutral-700/60"
+                    ? "bg-surface-hover"
                     : ""
                 }`}
               >
@@ -339,7 +339,7 @@ export const ModelList = forwardRef(function ModelList(
                 </span>
                 {model.isCloud() && (
                   <svg
-                    className="h-3 fill-current text-neutral-500 dark:text-neutral-400"
+                    className="h-3 fill-current text-fg-muted"
                     viewBox="0 0 20 15"
                     strokeWidth={1}
                     xmlns="http://www.w3.org/2000/svg"
@@ -350,7 +350,7 @@ export const ModelList = forwardRef(function ModelList(
                 {model.digest === undefined &&
                   (airplaneMode || !model.isCloud()) && (
                     <ArrowDownTrayIcon
-                      className="h-4 w-4 text-neutral-500 dark:text-neutral-400"
+                      className="h-4 w-4 text-fg-muted"
                       strokeWidth={1.75}
                     />
                   )}

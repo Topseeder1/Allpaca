@@ -234,11 +234,17 @@ export function FileUpload({
       {/* Drop zone overlay */}
       {isDragging && (
         <div className="absolute inset-0 z-[9999] pointer-events-none">
+          {/* Scrim kept literal: translucent depth cue, same family as shadow
+              tokens — theme-independent by design */}
           <div className="absolute inset-0 bg-neutral-500/5 dark:bg-neutral-400/10 transition-opacity duration-200" />
-          <div className="absolute inset-0 bg-neutral-50 bg-opacity-90 dark:bg-neutral-900 dark:bg-opacity-30 flex items-center justify-center">
-            <div className="bg-white/90 dark:bg-neutral-900/90 backdrop-blur-xl rounded-2xl p-12 mx-4 max-w-sm text-center border border-neutral-200/50 dark:border-neutral-700/50 shadow-2xl">
-              <DocumentPlusIcon className="w-8 h-8 mx-auto mb-2 text-black dark:text-white" />
-              <p className="text-neutral-500 dark:text-neutral-400 text-sm font-medium leading-relaxed">
+          {/* bg-opacity-* below replaced with v4 slash alpha: those v3-era
+              utilities are removed in v4 and were silently no-ops, leaving the
+              dark overlay fully opaque. Slash syntax restores the intended
+              90% light / 30% dark translucency. */}
+          <div className="absolute inset-0 bg-surface/90 dark:bg-surface/30 flex items-center justify-center">
+            <div className="bg-surface/90 backdrop-blur-xl rounded-2xl p-12 mx-4 max-w-sm text-center border border-border/50 shadow-2xl">
+              <DocumentPlusIcon className="w-8 h-8 mx-auto mb-2 text-fg" />
+              <p className="text-fg-muted text-sm font-medium leading-relaxed">
                 Drop files here or paste from clipboard to add them to your
                 message
               </p>
