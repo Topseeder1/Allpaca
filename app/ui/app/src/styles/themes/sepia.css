@@ -10,10 +10,11 @@
   --color-surface-hover:  #ddd0b4;
 
   --color-fg:             #433422;
-  --color-fg-muted:       #7a6a54;
+  --color-fg-muted:       #6b5a44;  /* deepened ink — AA fix: was #7a6a54 (3.85:1 → 4.87:1 on surface-raised; 5.34:1 on surface) */
 
   --color-border:         #d4c6ab;
 
   --color-accent:         #8b5a2b;
   --color-accent-fg:      #f0e6d2;
+
 }

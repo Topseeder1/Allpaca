@@ -10,10 +10,11 @@
   --color-surface-hover:  #e5ded2;
 
   --color-fg:             #1c1917;
-  --color-fg-muted:       #78716c;
+  --color-fg-muted:       #57534e;  /* stone-600 — AA fix: was #78716c (4.04:1 → 6.43:1 on surface-raised; 4.49:1 → 7.14:1 on surface) */
 
   --color-border:         #e0d8ca;
 
   --color-accent:         #b45309;
   --color-accent-fg:      #faf7f2;
+
 }

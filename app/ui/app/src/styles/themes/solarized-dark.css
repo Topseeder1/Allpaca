@@ -3,6 +3,7 @@
  * Scheme: dark.
  *
  * Reference: https://ethanschoonover.com/solarized/
+ * fg-muted & accent-fg are derived WCAG AA overrides — see inline notes.
  */
 [data-theme="solarized-dark"] {
   color-scheme: dark;
@@ -12,10 +13,11 @@
   --color-surface-hover:  #0e4050; /* derived hover */
 
   --color-fg:             #93a1a1; /* base1 */
-  --color-fg-muted:       #586e75; /* base01 */
+  --color-fg-muted:       #8e9d9a; /* derived: base0→base1 mix — AA fix: was base01 #586e75 (2.42:1 → 4.60:1 on raised; 5.32:1 on surface; base0 alone = 4.05:1, still failing) */
 
   --color-border:         #073642; /* base02 */
 
   --color-accent:         #268bd2; /* blue */
-  --color-accent-fg:      #fdf6e3; /* base3 */
+  --color-accent-fg:      #00202c; /* derived: base03 shade — AA fix: was base3 #fdf6e3 (3.41:1 → 4.59:1 on accent; no light value reaches 4.5 on blue) */
+
 }

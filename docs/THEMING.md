@@ -391,6 +391,30 @@ Gotchas:
 7. Never drop the `.light-only` exclusion from the `dark:` variant.
 8. Never map status colors or named brand buttons onto tokens.
 
+## Contrast Audit — 2026-10-12 (WCAG 2.1 relative luminance, 8-bit sRGB)
+
+12 pairs audited (2 per theme × 6). Bar: 4.5:1 (AA); high-contrast judged at 7:1 (AAA) per its stated goal.
+Result: 8 pass / 4 fail → 3 theme files corrected (value-only edits; token names and schemes unchanged).
+
+| Theme | Pair | Before | After | Verdict |
+|---|---|---|---|---|
+| allpaca-dark | muted/raised | 6.01 ✅ | — | pass |
+| allpaca-dark | accent-fg/accent | 8.14 ✅ | — | pass |
+| allpaca-light | muted/raised | 4.04 ❌ | 6.43 ✅ | fixed (#78716c → #57534e, stone-600) |
+| allpaca-light | accent-fg/accent | 4.70 ✅ | — | pass (margin 0.20) |
+| sepia | muted/raised | 3.85 ❌ | 4.87 ✅ | fixed (#7a6a54 → #6b5a44) |
+| sepia | accent-fg/accent | 4.72 ✅ | — | pass |
+| high-contrast | muted/raised | 13.36 ✅ | — | pass (AAA) |
+| high-contrast | accent-fg/accent | 19.56 ✅ | — | pass (AAA) |
+| nord | muted/raised | 7.45 ✅ | — | pass (AAA) |
+| nord | accent-fg/accent | 6.24 ✅ | — | pass |
+| solarized-dark | muted/raised | 2.42 ❌ | 4.60 ✅ | fixed (#586e75 → #8e9d9a, base0→base1 mix) |
+| solarized-dark | accent-fg/accent | 3.41 ❌ | 4.59 ✅ | fixed (#fdf6e3 → #00202c, base03 shade) |
+
+Notes: solarized-dark muted fixed via documented blend — base0 alone = 4.05:1 on base02; base1 = fg. Accent pair
+unreachable with light text (needs L > 1.0); darkened-fg matches sibling-theme pattern. Threshold footnote:
+0.03928 vs 0.04045 is identical for all 8-bit channels.
+
 ---
 
 *Authored from the Allpaca theming implementation series (Batches 1–6 +
