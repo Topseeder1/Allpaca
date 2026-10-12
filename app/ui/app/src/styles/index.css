@@ -1,0 +1,14 @@
+/*
+ * Style-tree entrypoint.
+ *
+ * Import order is deliberate:
+ *   1. fonts/roles.css       — role tokens (--font-sans / --font-rounded)
+ *   2. fonts/options.css     — stack catalog + html[data-font] selector (Batch 2)
+ *   3. themes/_contract.css  — 8 semantic --color-* tokens (defaults)
+ *
+ * Future batches add (do not create yet):
+ *   ./themes/allpaca-dark.css … (Batch 3 — per-theme overrides)
+ */
+@import "./fonts/roles.css";
+@import "./fonts/options.css";
+@import "./themes/_contract.css";

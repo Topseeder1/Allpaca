@@ -3,6 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="color-scheme" content="light dark" />
+
+    <!--
+      Font bootstrap — MUST run before the stylesheet link so the chosen font
+      is applied on the very first paint (prevents FOUC). React only READS
+      documentElement.dataset.font at boot; it never re-applies it, which
+      would cause a second flicker. Storage key is namespaced `allpaca:` to
+      avoid collisions. Batch 3 extends this same block with the theme axis.
+    -->
+    <script>
+      (function () {
+        try {
+          var font = localStorage.getItem("allpaca:font") || "system";
+          document.documentElement.setAttribute("data-font", font);
+        } catch (e) {
+          /* localStorage unavailable (private mode) — defaults apply */
+        }
+      })();
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/src/index.css" />

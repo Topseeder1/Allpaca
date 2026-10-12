@@ -1,0 +1,87 @@
+/*
+ * Font CATALOG + runtime selector — Batch 2 (system-only).
+ *
+ * TWO CONCERNS, ONE FILE
+ *   1. CATALOG   — raw font-family stacks, keyed by name. Declared as plain
+ *      custom properties on :root (NOT @theme), so Tailwind generates no
+ *      utility classes for them. They are internal values; components never
+ *      reference them directly.
+ *
+ *   2. SELECTION — html[data-font="…"] rules that rebind the --font-sans
+ *      ROLE (declared in ./roles.css) to the chosen catalog entry.
+ *
+ * HOW THE OVERRIDE WINS
+ *   roles.css declares --font-sans inside @theme, which Tailwind emits into
+ *   @layer theme — a LOW-priority layer. Every rule in THIS file is
+ *   unlayered, and unlayered CSS always beats layered CSS. So the rebind
+ *   wins on layer priority alone; source order and specificity are belt-
+ *   and-braces on top.
+ *
+ * WHO SETS THE ATTRIBUTE
+ *   <html data-font="…"> is written by the inline script in index.html,
+ *   from localStorage, BEFORE first paint. React never writes it at boot.
+ *
+ * SYSTEM-ONLY (v1)
+ *   Every stack below is composed of fonts that ship with the OS: zero bytes,
+ *   works offline, no licensing. Bundling a font later (Batch 2.5) is purely
+ *   additive — see the commented template at the bottom of this file.
+ */
+
+/* ---------------------------------------------------------------------- *
+ * 1. CATALOG                                                             *
+ * ---------------------------------------------------------------------- */
+:root {
+  /* Default. Renders as the platform's native UI font. */
+  --font-stack-system:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Rounded accent. macOS/iOS get true rounded; others fall back cleanly. */
+  --font-stack-rounded:
+    ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
+    Quicksand, system-ui, sans-serif;
+
+  /* Monospace — code blocks, the composer, anything tabular. */
+  --font-stack-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono",
+    "Roboto Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Serif — long-form reading, markdown output. */
+  --font-stack-serif:
+    ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+}
+
+/* ---------------------------------------------------------------------- *
+ * 2. SELECTION                                                           *
+ * ---------------------------------------------------------------------- *
+ * Rebind the --font-sans ROLE to the chosen stack.
+ *
+ * The bare `:root` line is a defensive fallback for the (impossible-in-
+ * practice) case where no data-font attribute is present. The inline script
+ * always sets one, defaulting to "system".
+ *
+ * --font-rounded is deliberately NOT rebound: it is a design accent, not a
+ * user preference. It stays put no matter which stack is selected.
+ */
+:root                     { --font-sans: var(--font-stack-system);  }
+html[data-font="system"]  { --font-sans: var(--font-stack-system);  }
+html[data-font="rounded"] { --font-sans: var(--font-stack-rounded); }
+html[data-font="mono"]    { --font-sans: var(--font-stack-mono);    }
+html[data-font="serif"]   { --font-sans: var(--font-stack-serif);   }
+
+/* ---------------------------------------------------------------------- *
+ * TEMPLATE — bundled font (Batch 2.5; leave disabled for now)            *
+ * ---------------------------------------------------------------------- *
+ * @font-face {
+ *   font-family: "Allpaca Sans";
+ *   src: url("/fonts/AllpacaSans.woff2") format("woff2");
+ *   font-weight: 100 900;   // variable font: all weights from one file
+ *   font-style: normal;
+ *   font-display: swap;     // show fallback instantly, swap when loaded
+ * }
+ *
+ * Then add to the catalog:
+ *   --font-stack-allpaca: "Allpaca Sans", ui-sans-serif, system-ui, sans-serif;
+ * And to the selection layer:
+ *   html[data-font="allpaca"] { --font-sans: var(--font-stack-allpaca); }
+ */
