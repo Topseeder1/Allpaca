@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/x/imagegen/safetensors"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/x/imagegen/safetensors"
 )
 
 // ModelConfig represents the config blob stored with a model.

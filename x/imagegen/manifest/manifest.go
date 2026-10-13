@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ollama/ollama/envconfig"
+	"github.com/topseeder1/allpaca/envconfig"
 )
 
 // ManifestLayer represents a layer in the manifest.

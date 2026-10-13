@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/ollama/ollama/x/imagegen/manifest"
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/nn"
-	"github.com/ollama/ollama/x/imagegen/safetensors"
+	"github.com/topseeder1/allpaca/x/imagegen/manifest"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/nn"
+	"github.com/topseeder1/allpaca/x/imagegen/safetensors"
 )
 
 // TransformerConfig holds Flux2 transformer configuration

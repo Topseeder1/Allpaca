@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/nn"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/nn"
 )
 
 // WeightSource is an interface for loading weights.

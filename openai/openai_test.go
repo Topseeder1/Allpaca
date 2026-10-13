@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 )
 
 // testArgs creates ToolCallFunctionArguments from a map (convenience function for tests)

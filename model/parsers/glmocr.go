@@ -1,6 +1,6 @@
 package parsers
 
-import "github.com/ollama/ollama/api"
+import "github.com/topseeder1/allpaca/api"
 
 // GlmOcrParser is the GLM46 parser with thinking disabled.
 type GlmOcrParser struct {

@@ -15,14 +15,14 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 
-	"github.com/ollama/ollama/x/imagegen"
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/models/flux2"
-	"github.com/ollama/ollama/x/imagegen/models/gemma3"
-	"github.com/ollama/ollama/x/imagegen/models/gpt_oss"
-	"github.com/ollama/ollama/x/imagegen/models/llama"
-	"github.com/ollama/ollama/x/imagegen/models/zimage"
-	"github.com/ollama/ollama/x/imagegen/safetensors"
+	"github.com/topseeder1/allpaca/x/imagegen"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/models/flux2"
+	"github.com/topseeder1/allpaca/x/imagegen/models/gemma3"
+	"github.com/topseeder1/allpaca/x/imagegen/models/gpt_oss"
+	"github.com/topseeder1/allpaca/x/imagegen/models/llama"
+	"github.com/topseeder1/allpaca/x/imagegen/models/zimage"
+	"github.com/topseeder1/allpaca/x/imagegen/safetensors"
 )
 
 // stringSlice is a flag type that accumulates multiple values

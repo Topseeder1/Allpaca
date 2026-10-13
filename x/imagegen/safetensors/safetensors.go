@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // SafetensorHeader represents the JSON header of a safetensors file

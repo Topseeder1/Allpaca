@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/auth"
+	"github.com/topseeder1/allpaca/auth"
 )
 
 type WebSearch struct{}

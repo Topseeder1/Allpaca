@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 )
 
 // testPropsMap creates a ToolPropertiesMap from a map (convenience function for tests)

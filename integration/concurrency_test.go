@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/format"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/format"
 )
 
 // Send multiple requests in parallel (concurrently) to a single model and ensure responses are expected

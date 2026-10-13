@@ -5,8 +5,8 @@ package gemma3
 import (
 	"math"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/nn"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/nn"
 )
 
 // VisionConfig holds configuration for the SigLIP vision tower

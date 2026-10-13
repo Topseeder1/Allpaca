@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	fsc "github.com/ollama/ollama/fs"
-	"github.com/ollama/ollama/fs/ggml"
+	fsc "github.com/topseeder1/allpaca/fs"
+	"github.com/topseeder1/allpaca/fs/ggml"
 )
 
 type tensorData struct {

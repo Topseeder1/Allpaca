@@ -3,7 +3,7 @@ package renderers
 import (
 	"encoding/json"
 
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 )
 
 func args(s string) api.ToolCallFunctionArguments {

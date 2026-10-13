@@ -21,13 +21,13 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/llama"
-	"github.com/ollama/ollama/llm"
-	"github.com/ollama/ollama/logutil"
-	"github.com/ollama/ollama/ml"
-	"github.com/ollama/ollama/runner/common"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/llama"
+	"github.com/topseeder1/allpaca/llm"
+	"github.com/topseeder1/allpaca/logutil"
+	"github.com/topseeder1/allpaca/ml"
+	"github.com/topseeder1/allpaca/runner/common"
 )
 
 // response contains a piece of generated text along with optional logprobs

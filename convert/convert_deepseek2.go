@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/ollama/ollama/fs/ggml"
+	"github.com/topseeder1/allpaca/fs/ggml"
 )
 
 type deepseek2Model struct {

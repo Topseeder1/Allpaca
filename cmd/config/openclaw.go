@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ollama/ollama/envconfig"
+	"github.com/topseeder1/allpaca/envconfig"
 )
 
 type Openclaw struct{}

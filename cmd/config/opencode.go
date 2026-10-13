@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/envconfig"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/envconfig"
 )
 
 // OpenCode implements Runner and Editor for OpenCode integration

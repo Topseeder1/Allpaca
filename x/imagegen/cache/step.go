@@ -2,7 +2,7 @@
 
 package cache
 
-import "github.com/ollama/ollama/x/imagegen/mlx"
+import "github.com/topseeder1/allpaca/x/imagegen/mlx"
 
 // StepCache caches layer outputs across diffusion denoising steps.
 // Based on DeepCache (CVPR 2024) and Learning-to-Cache (NeurIPS 2024):

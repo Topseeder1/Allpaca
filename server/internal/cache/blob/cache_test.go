@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ollama/ollama/server/internal/testutil"
+	"github.com/topseeder1/allpaca/server/internal/testutil"
 )
 
 func init() {

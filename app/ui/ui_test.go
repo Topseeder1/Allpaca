@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ollama/ollama/app/store"
+	"github.com/topseeder1/allpaca/app/store"
 )
 
 func TestHandlePostApiSettings(t *testing.T) {

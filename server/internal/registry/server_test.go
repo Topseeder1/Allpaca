@@ -15,9 +15,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ollama/ollama/server/internal/cache/blob"
-	"github.com/ollama/ollama/server/internal/client/ollama"
-	"github.com/ollama/ollama/server/internal/testutil"
+	"github.com/topseeder1/allpaca/server/internal/cache/blob"
+	"github.com/topseeder1/allpaca/server/internal/client/ollama"
+	"github.com/topseeder1/allpaca/server/internal/testutil"
 	"golang.org/x/tools/txtar"
 
 	_ "embed"

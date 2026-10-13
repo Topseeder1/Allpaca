@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // ManifestWeights provides fast weight loading from tensor blobs.

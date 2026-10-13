@@ -12,7 +12,7 @@ import "C"
 import (
 	"unsafe"
 
-	fsggml "github.com/ollama/ollama/fs/ggml"
+	fsggml "github.com/topseeder1/allpaca/fs/ggml"
 )
 
 // ConvertToF32 converts (dequantizes) the raw data to F32 so we can then quantize it

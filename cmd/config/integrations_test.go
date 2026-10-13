@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 	"github.com/spf13/cobra"
 )
 

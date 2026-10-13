@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ollama/ollama/llama"
+	"github.com/topseeder1/allpaca/llama"
 )
 
 func TestImageCache(t *testing.T) {

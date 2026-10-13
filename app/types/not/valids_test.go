@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ollama/ollama/app/types/not"
+	"github.com/topseeder1/allpaca/app/types/not"
 )
 
 func ExampleValids() {

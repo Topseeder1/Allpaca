@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ollama/ollama/llm"
-	"github.com/ollama/ollama/ml"
-	"github.com/ollama/ollama/x/imagegen/manifest"
+	"github.com/topseeder1/allpaca/llm"
+	"github.com/topseeder1/allpaca/ml"
+	"github.com/topseeder1/allpaca/x/imagegen/manifest"
 )
 
 // Server wraps an MLX runner subprocess to implement llm.LlamaServer.

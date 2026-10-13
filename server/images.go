@@ -20,17 +20,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/fs/gguf"
-	"github.com/ollama/ollama/manifest"
-	"github.com/ollama/ollama/model/parsers"
-	"github.com/ollama/ollama/parser"
-	"github.com/ollama/ollama/template"
-	"github.com/ollama/ollama/thinking"
-	"github.com/ollama/ollama/types/model"
-	"github.com/ollama/ollama/version"
-	"github.com/ollama/ollama/x/imagegen/transfer"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/fs/gguf"
+	"github.com/topseeder1/allpaca/manifest"
+	"github.com/topseeder1/allpaca/model/parsers"
+	"github.com/topseeder1/allpaca/parser"
+	"github.com/topseeder1/allpaca/template"
+	"github.com/topseeder1/allpaca/thinking"
+	"github.com/topseeder1/allpaca/types/model"
+	"github.com/topseeder1/allpaca/version"
+	"github.com/topseeder1/allpaca/x/imagegen/transfer"
 )
 
 var (

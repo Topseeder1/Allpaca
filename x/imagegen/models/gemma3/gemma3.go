@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ollama/ollama/x/imagegen/cache"
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/nn"
-	"github.com/ollama/ollama/x/imagegen/safetensors"
-	"github.com/ollama/ollama/x/imagegen/tokenizer"
+	"github.com/topseeder1/allpaca/x/imagegen/cache"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/nn"
+	"github.com/topseeder1/allpaca/x/imagegen/safetensors"
+	"github.com/topseeder1/allpaca/x/imagegen/tokenizer"
 )
 
 // TextConfig holds configuration for the text model

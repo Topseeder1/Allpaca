@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/format"
-	"github.com/ollama/ollama/ml"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/format"
+	"github.com/topseeder1/allpaca/ml"
 	"golang.org/x/sync/semaphore"
 )
 

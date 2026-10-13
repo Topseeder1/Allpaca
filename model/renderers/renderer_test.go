@@ -3,7 +3,7 @@ package renderers
 import (
 	"testing"
 
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 )
 
 type mockRenderer struct{}

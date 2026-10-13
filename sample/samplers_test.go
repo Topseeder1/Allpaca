@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ollama/ollama/tokenizer"
+	"github.com/topseeder1/allpaca/tokenizer"
 )
 
 func TestWeighted(t *testing.T) {

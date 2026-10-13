@@ -3,7 +3,7 @@
 package zimage
 
 import (
-	"github.com/ollama/ollama/x/imagegen/models/qwen3"
+	"github.com/topseeder1/allpaca/x/imagegen/models/qwen3"
 )
 
 // Re-export types from shared qwen3 package for backwards compatibility

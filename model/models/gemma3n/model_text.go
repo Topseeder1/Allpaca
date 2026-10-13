@@ -4,12 +4,12 @@ import (
 	"cmp"
 	"math"
 
-	"github.com/ollama/ollama/fs"
-	"github.com/ollama/ollama/kvcache"
-	"github.com/ollama/ollama/ml"
-	"github.com/ollama/ollama/ml/nn"
-	"github.com/ollama/ollama/ml/nn/rope"
-	"github.com/ollama/ollama/model/input"
+	"github.com/topseeder1/allpaca/fs"
+	"github.com/topseeder1/allpaca/kvcache"
+	"github.com/topseeder1/allpaca/ml"
+	"github.com/topseeder1/allpaca/ml/nn"
+	"github.com/topseeder1/allpaca/ml/nn/rope"
+	"github.com/topseeder1/allpaca/model/input"
 )
 
 type TextModel struct {

@@ -3,8 +3,8 @@ package gemma3
 import (
 	"image"
 
-	"github.com/ollama/ollama/fs"
-	"github.com/ollama/ollama/model/imageproc"
+	"github.com/topseeder1/allpaca/fs"
+	"github.com/topseeder1/allpaca/model/imageproc"
 )
 
 type ImageProcessor struct {

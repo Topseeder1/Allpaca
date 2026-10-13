@@ -15,10 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ollama/ollama/manifest"
-	"github.com/ollama/ollama/progress"
-	"github.com/ollama/ollama/types/model"
-	"github.com/ollama/ollama/x/create"
+	"github.com/topseeder1/allpaca/manifest"
+	"github.com/topseeder1/allpaca/progress"
+	"github.com/topseeder1/allpaca/types/model"
+	"github.com/topseeder1/allpaca/x/create"
 )
 
 // MinOllamaVersion is the minimum Ollama version required for safetensors models.

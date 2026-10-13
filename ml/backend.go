@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ollama/ollama/fs"
+	"github.com/topseeder1/allpaca/fs"
 )
 
 type Backend interface {

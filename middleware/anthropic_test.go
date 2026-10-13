@@ -13,8 +13,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
-	"github.com/ollama/ollama/anthropic"
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/anthropic"
+	"github.com/topseeder1/allpaca/api"
 )
 
 func captureAnthropicRequest(capturedRequest any) gin.HandlerFunc {

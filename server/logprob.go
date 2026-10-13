@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/llm"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/llm"
 )
 
 // toAPILogprobs converts llm.Logprobs to api.Logprobs

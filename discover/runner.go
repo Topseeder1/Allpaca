@@ -16,11 +16,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/format"
-	"github.com/ollama/ollama/llm"
-	"github.com/ollama/ollama/logutil"
-	"github.com/ollama/ollama/ml"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/format"
+	"github.com/topseeder1/allpaca/llm"
+	"github.com/topseeder1/allpaca/logutil"
+	"github.com/topseeder1/allpaca/ml"
 )
 
 var (

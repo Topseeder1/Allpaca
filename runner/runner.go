@@ -1,9 +1,9 @@
 package runner
 
 import (
-	"github.com/ollama/ollama/runner/llamarunner"
-	"github.com/ollama/ollama/runner/ollamarunner"
-	"github.com/ollama/ollama/x/imagegen"
+	"github.com/topseeder1/allpaca/runner/llamarunner"
+	"github.com/topseeder1/allpaca/runner/ollamarunner"
+	"github.com/topseeder1/allpaca/x/imagegen"
 )
 
 func Execute(args []string) error {

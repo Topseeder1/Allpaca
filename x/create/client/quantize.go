@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // quantizeTensor loads a tensor from safetensors format, quantizes it,

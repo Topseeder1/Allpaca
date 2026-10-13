@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/ollama/ollama/llm"
+	"github.com/topseeder1/allpaca/llm"
 )
 
 func TestCalculateLogprobs(t *testing.T) {

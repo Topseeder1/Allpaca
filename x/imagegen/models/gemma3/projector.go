@@ -3,8 +3,8 @@
 package gemma3
 
 import (
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/nn"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/nn"
 )
 
 // MultiModalProjector projects vision features to text embedding space

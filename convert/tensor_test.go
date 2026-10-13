@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/ollama/ollama/fs/ggml"
+	"github.com/topseeder1/allpaca/fs/ggml"
 	"github.com/pdevine/tensor"
 )
 

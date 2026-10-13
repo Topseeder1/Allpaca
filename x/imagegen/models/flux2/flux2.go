@@ -12,10 +12,10 @@ import (
 	"math"
 	"time"
 
-	"github.com/ollama/ollama/x/imagegen/manifest"
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/models/qwen3"
-	"github.com/ollama/ollama/x/imagegen/tokenizer"
+	"github.com/topseeder1/allpaca/x/imagegen/manifest"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/models/qwen3"
+	"github.com/topseeder1/allpaca/x/imagegen/tokenizer"
 	"golang.org/x/image/draw"
 )
 

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ollama/ollama/x/imagegen/safetensors"
+	"github.com/topseeder1/allpaca/x/imagegen/safetensors"
 )
 
 // CreateImageGenModel imports an image generation model from a directory.

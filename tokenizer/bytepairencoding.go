@@ -10,7 +10,7 @@ import (
 
 	"github.com/dlclark/regexp2"
 	heap "github.com/emirpasic/gods/v2/trees/binaryheap"
-	"github.com/ollama/ollama/logutil"
+	"github.com/topseeder1/allpaca/logutil"
 )
 
 type BytePairEncoding struct {

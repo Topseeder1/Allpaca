@@ -5,8 +5,8 @@ package responses
 import (
 	"time"
 
-	"github.com/ollama/ollama/app/store"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/app/store"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 type ChatInfo struct {

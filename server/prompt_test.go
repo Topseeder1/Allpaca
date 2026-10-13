@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/template"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/template"
 )
 
 func TestChatPrompt(t *testing.T) {

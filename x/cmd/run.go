@@ -18,12 +18,12 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/progress"
-	"github.com/ollama/ollama/readline"
-	"github.com/ollama/ollama/types/model"
-	"github.com/ollama/ollama/x/agent"
-	"github.com/ollama/ollama/x/tools"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/progress"
+	"github.com/topseeder1/allpaca/readline"
+	"github.com/topseeder1/allpaca/types/model"
+	"github.com/topseeder1/allpaca/x/agent"
+	"github.com/topseeder1/allpaca/x/tools"
 )
 
 // Tool output capping constants

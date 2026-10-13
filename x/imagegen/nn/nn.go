@@ -3,7 +3,7 @@
 // Package nn provides neural network layer types.
 package nn
 
-import "github.com/ollama/ollama/x/imagegen/mlx"
+import "github.com/topseeder1/allpaca/x/imagegen/mlx"
 
 // Layer is the interface for neural network layers with a Forward method.
 type Layer interface {

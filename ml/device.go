@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/format"
-	"github.com/ollama/ollama/logutil"
+	"github.com/topseeder1/allpaca/format"
+	"github.com/topseeder1/allpaca/logutil"
 )
 
 // GPULayers is a set of layers to be allocated on a single GPU

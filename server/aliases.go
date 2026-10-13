@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ollama/ollama/manifest"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/manifest"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 const (

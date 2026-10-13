@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/app/store"
-	"github.com/ollama/ollama/app/version"
-	"github.com/ollama/ollama/auth"
+	"github.com/topseeder1/allpaca/app/store"
+	"github.com/topseeder1/allpaca/app/version"
+	"github.com/topseeder1/allpaca/auth"
 )
 
 var (

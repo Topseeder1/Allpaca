@@ -10,7 +10,7 @@ import (
 	"github.com/pdevine/tensor"
 	"github.com/pdevine/tensor/native"
 
-	"github.com/ollama/ollama/fs/ggml"
+	"github.com/topseeder1/allpaca/fs/ggml"
 )
 
 type qwen3NextModel struct {

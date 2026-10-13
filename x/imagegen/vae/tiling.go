@@ -4,7 +4,7 @@
 package vae
 
 import (
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // TilingConfig holds configuration for tiled VAE decoding.

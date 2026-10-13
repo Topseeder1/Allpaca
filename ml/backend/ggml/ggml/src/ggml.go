@@ -36,7 +36,7 @@ import (
 	"sync"
 	"unsafe"
 
-	_ "github.com/ollama/ollama/ml/backend/ggml/ggml/src/ggml-cpu"
+	_ "github.com/topseeder1/allpaca/ml/backend/ggml/ggml/src/ggml-cpu"
 )
 
 func init() {

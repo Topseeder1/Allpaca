@@ -4,7 +4,7 @@
 package cache
 
 import (
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // TeaCache implements Timestep Embedding Aware Caching for diffusion models.

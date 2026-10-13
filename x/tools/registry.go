@@ -6,7 +6,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 )
 
 // Tool defines the interface for agent tools.

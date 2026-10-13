@@ -5,7 +5,7 @@ package zimage
 import (
 	"math"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // FlowMatchSchedulerConfig holds scheduler configuration

@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"math"
 
-	"github.com/ollama/ollama/ml"
-	"github.com/ollama/ollama/ml/nn"
+	"github.com/topseeder1/allpaca/ml"
+	"github.com/topseeder1/allpaca/ml/nn"
 )
 
 const chunkSize = 64

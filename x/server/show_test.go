@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ollama/ollama/manifest"
+	"github.com/topseeder1/allpaca/manifest"
 )
 
 func TestBuildModelInfo(t *testing.T) {

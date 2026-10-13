@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ollama/ollama/x/imagegen/cache"
-	"github.com/ollama/ollama/x/imagegen/manifest"
-	"github.com/ollama/ollama/x/imagegen/mlx"
-	"github.com/ollama/ollama/x/imagegen/tokenizer"
-	"github.com/ollama/ollama/x/imagegen/vae"
+	"github.com/topseeder1/allpaca/x/imagegen/cache"
+	"github.com/topseeder1/allpaca/x/imagegen/manifest"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/tokenizer"
+	"github.com/topseeder1/allpaca/x/imagegen/vae"
 )
 
 // GenerateConfig holds all options for image generation.

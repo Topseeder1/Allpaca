@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/progress"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/progress"
 	"github.com/spf13/cobra"
 )
 

@@ -5,7 +5,7 @@ package flux2
 import (
 	"math"
 
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // RoPEConfig holds 4D RoPE configuration for Flux2

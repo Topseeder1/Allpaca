@@ -11,11 +11,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/fs/ggml"
-	"github.com/ollama/ollama/manifest"
-	"github.com/ollama/ollama/template"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/fs/ggml"
+	"github.com/topseeder1/allpaca/manifest"
+	"github.com/topseeder1/allpaca/template"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 var intermediateBlobs map[string]string = make(map[string]string)

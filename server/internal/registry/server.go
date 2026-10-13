@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ollama/ollama/server/internal/cache/blob"
-	"github.com/ollama/ollama/server/internal/client/ollama"
-	"github.com/ollama/ollama/server/internal/internal/backoff"
+	"github.com/topseeder1/allpaca/server/internal/cache/blob"
+	"github.com/topseeder1/allpaca/server/internal/client/ollama"
+	"github.com/topseeder1/allpaca/server/internal/internal/backoff"
 )
 
 // Local implements an http.Handler for handling local Ollama API model

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 const testModelName = "test.local/allpaca/m:latest"

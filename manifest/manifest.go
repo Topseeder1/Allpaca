@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 // Manifest is the on-disk manifest for a model. Layer is defined in layer.go;

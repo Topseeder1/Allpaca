@@ -22,16 +22,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/convert"
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/format"
-	ofs "github.com/ollama/ollama/fs"
-	"github.com/ollama/ollama/fs/ggml"
-	"github.com/ollama/ollama/manifest"
-	"github.com/ollama/ollama/template"
-	"github.com/ollama/ollama/types/errtypes"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/convert"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/format"
+	ofs "github.com/topseeder1/allpaca/fs"
+	"github.com/topseeder1/allpaca/fs/ggml"
+	"github.com/topseeder1/allpaca/manifest"
+	"github.com/topseeder1/allpaca/template"
+	"github.com/topseeder1/allpaca/types/errtypes"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 var (

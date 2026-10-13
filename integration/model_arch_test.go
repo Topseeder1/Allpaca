@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/format"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/format"
 )
 
 func TestModelsChat(t *testing.T) {

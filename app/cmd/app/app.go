@@ -22,14 +22,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ollama/ollama/app/auth"
-	"github.com/ollama/ollama/app/logrotate"
-	"github.com/ollama/ollama/app/server"
-	"github.com/ollama/ollama/app/store"
-	"github.com/ollama/ollama/app/tools"
-	"github.com/ollama/ollama/app/ui"
-	"github.com/ollama/ollama/app/updater"
-	"github.com/ollama/ollama/app/version"
+	"github.com/topseeder1/allpaca/app/auth"
+	"github.com/topseeder1/allpaca/app/logrotate"
+	"github.com/topseeder1/allpaca/app/server"
+	"github.com/topseeder1/allpaca/app/store"
+	"github.com/topseeder1/allpaca/app/tools"
+	"github.com/topseeder1/allpaca/app/ui"
+	"github.com/topseeder1/allpaca/app/updater"
+	"github.com/topseeder1/allpaca/app/version"
 )
 
 var (

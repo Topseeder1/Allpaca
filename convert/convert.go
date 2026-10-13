@@ -13,8 +13,8 @@ import (
 	"slices"
 	"strings"
 
-	ofs "github.com/ollama/ollama/fs"
-	"github.com/ollama/ollama/fs/ggml"
+	ofs "github.com/topseeder1/allpaca/fs"
+	"github.com/topseeder1/allpaca/fs/ggml"
 )
 
 type ModelParameters struct {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/manifest"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/manifest"
 )
 
 func TestConvertFromSafetensors(t *testing.T) {

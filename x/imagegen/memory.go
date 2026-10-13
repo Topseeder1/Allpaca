@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/ollama/ollama/x/imagegen/manifest"
+	"github.com/topseeder1/allpaca/x/imagegen/manifest"
 )
 
 // SupportedBackends lists the backends that support image generation.

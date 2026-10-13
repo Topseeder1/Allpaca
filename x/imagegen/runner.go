@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/x/imagegen/mlx"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/x/imagegen/mlx"
 )
 
 // Execute is the entry point for the unified MLX runner subprocess.

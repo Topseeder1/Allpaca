@@ -24,12 +24,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/go-cmp/cmp"
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/fs/ggml"
-	"github.com/ollama/ollama/openai"
-	"github.com/ollama/ollama/server/internal/client/ollama"
-	"github.com/ollama/ollama/types/model"
-	"github.com/ollama/ollama/version"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/fs/ggml"
+	"github.com/topseeder1/allpaca/openai"
+	"github.com/topseeder1/allpaca/server/internal/client/ollama"
+	"github.com/topseeder1/allpaca/types/model"
+	"github.com/topseeder1/allpaca/version"
 )
 
 func createTestFile(t *testing.T, name string) (string, string) {

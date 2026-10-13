@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	fsggml "github.com/ollama/ollama/fs/ggml"
-	"github.com/ollama/ollama/ml"
-	"github.com/ollama/ollama/ml/backend/ggml"
-	"github.com/ollama/ollama/ml/nn/pooling"
+	fsggml "github.com/topseeder1/allpaca/fs/ggml"
+	"github.com/topseeder1/allpaca/ml"
+	"github.com/topseeder1/allpaca/ml/backend/ggml"
+	"github.com/topseeder1/allpaca/ml/nn/pooling"
 )
 
 func setup(tb testing.TB, n int) ml.Backend {

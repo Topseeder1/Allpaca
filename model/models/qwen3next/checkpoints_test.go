@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ollama/ollama/fs/ggml"
-	"github.com/ollama/ollama/kvcache"
-	"github.com/ollama/ollama/ml"
+	"github.com/topseeder1/allpaca/fs/ggml"
+	"github.com/topseeder1/allpaca/kvcache"
+	"github.com/topseeder1/allpaca/ml"
 )
 
 func newTestBackend(tb testing.TB) ml.Backend {

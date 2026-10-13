@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ollama/ollama/api"
+	"github.com/topseeder1/allpaca/api"
 )
 
 // tool creates a test tool with the given name and properties
@@ -489,7 +489,7 @@ true
 				},
 			},
 		},
-		// regression test for <https://github.com/ollama/ollama/issues/12357>
+		// regression test for <https://github.com/topseeder1/allpaca/issues/12357>
 		{
 			name:  "ampersands in parameter values",
 			tools: []api.Tool{},

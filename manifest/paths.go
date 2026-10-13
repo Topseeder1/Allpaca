@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/envconfig"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 var ErrInvalidDigestFormat = errors.New("invalid digest format")

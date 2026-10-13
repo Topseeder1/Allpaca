@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ollama/ollama/api"
-	"github.com/ollama/ollama/manifest"
-	"github.com/ollama/ollama/types/model"
+	"github.com/topseeder1/allpaca/api"
+	"github.com/topseeder1/allpaca/manifest"
+	"github.com/topseeder1/allpaca/types/model"
 )
 
 // modelConfig represents the HuggingFace config.json structure
