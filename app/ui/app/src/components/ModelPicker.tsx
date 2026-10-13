@@ -15,6 +15,33 @@ import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 
 const stalenessCheckCache = new Map<string, number>();
 
+// OriginBadge shows which models directory a model was resolved from:
+// "allpaca" (ALLPACA_MODELS) or "ollama" (OLLAMA_MODELS). The value is emitted
+// by the server on /api/tags and carried through getModels() in api.ts.
+// Display-only — it has no effect on selection.
+function OriginBadge({ origin }: { origin?: string }) {
+  if (!origin) return null;
+
+  const isAllpaca = origin === "allpaca";
+
+  return (
+    <span
+      title={
+        isAllpaca
+          ? "From the Allpaca models directory"
+          : "From the Ollama models directory"
+      }
+      className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-medium uppercase leading-none tracking-wide ${
+        isAllpaca
+          ? "bg-accent/15 text-accent"
+          : "bg-surface-hover text-fg-muted"
+      }`}
+    >
+      {origin}
+    </span>
+  );
+}
+
 export const ModelPicker = forwardRef<
   HTMLButtonElement,
   {
@@ -334,8 +361,9 @@ export const ModelList = forwardRef(function ModelList(
                     : ""
                 }`}
               >
-                <span className="flex-1 text-left truncate min-w-0">
-                  {model.model}
+                <span className="flex flex-1 items-center gap-1.5 min-w-0 text-left">
+                  <span className="truncate">{model.model}</span>
+                  <OriginBadge origin={model.origin} />
                 </span>
                 {model.isCloud() && (
                   <svg

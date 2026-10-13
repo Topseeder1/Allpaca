@@ -126,7 +126,9 @@ func (s *Server) CreateHandler(c *gin.Context) {
 				if err == nil && !remote && (config.Renderer == "" || config.Parser == "" || config.Requires == "") {
 					mf, mErr := manifest.ParseNamedManifest(fromName)
 					if mErr == nil && mf.Config.Digest != "" {
-						configPath, pErr := manifest.BlobsPath(mf.Config.Digest)
+						// Resolve the config layer across all model roots: the
+						// base model may live in the Allpaca lane.
+						configPath, pErr := manifest.FindBlobPath(mf.Config.Digest)
 						if pErr == nil {
 							if cfgFile, fErr := os.Open(configPath); fErr == nil {
 								var baseConfig model.ConfigV2
@@ -357,7 +359,7 @@ func detectModelTypeFromFiles(files map[string]string) string {
 			return "gguf"
 		} else {
 			// try to see if we can find a gguf file even without the file extension
-			blobPath, err := manifest.BlobsPath(files[fn])
+			blobPath, err := manifest.FindBlobPath(files[fn])
 			if err != nil {
 				slog.Error("error getting blobs path", "file", fn)
 				return ""
@@ -409,7 +411,9 @@ func convertFromSafetensors(files map[string]string, baseLayers []*layerGGML, is
 			return nil, fmt.Errorf("%w: %s: %s", errFilePath, err, fp)
 		}
 
-		blobPath, err := manifest.BlobsPath(digest)
+		// Source blobs may live in either root; fall through to the Ollama
+		// root for the common case of freshly uploaded files.
+		blobPath, err := manifest.FindBlobPath(digest)
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +596,8 @@ func quantizeLayer(layer *layerGGML, quantizeType string, fn func(resp api.Progr
 		return nil, err
 	}
 
-	blob, err := manifest.BlobsPath(layer.Digest)
+	// Source blob may live in either root; the temp file lands beside it.
+	blob, err := manifest.FindBlobPath(layer.Digest)
 	if err != nil {
 		return nil, err
 	}
@@ -634,7 +639,7 @@ func ggufLayers(digest string, fn func(resp api.ProgressResponse)) ([]*layerGGML
 	var layers []*layerGGML
 
 	fn(api.ProgressResponse{Status: "parsing GGUF"})
-	blobPath, err := manifest.BlobsPath(digest)
+	blobPath, err := manifest.FindBlobPath(digest)
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +751,8 @@ func setParameters(layers []manifest.Layer, p map[string]any) ([]manifest.Layer,
 			continue
 		}
 
-		digestPath, err := manifest.BlobsPath(layer.Digest)
+		// Params layer may live in either root; find it across both.
+		digestPath, err := manifest.FindBlobPath(layer.Digest)
 		if err != nil {
 			return nil, err
 		}

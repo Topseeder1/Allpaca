@@ -130,8 +130,14 @@ export async function getModels(query?: string): Promise<Model[]> {
         // Remove the latest tag from the returned model
         const modelName = m.name.replace(/:latest$/, "");
 
+        // Preserve the origin tag the server emits on /api/tags
+        // ("allpaca" | "ollama"). The ollama/browser ModelResponse
+        // type doesn't declare it yet, so cast through.
+        const origin = (m as { origin?: string }).origin;
+
         return new Model({
           model: modelName,
+          origin,
           digest: m.digest,
           modified_at: m.modified_at ? new Date(m.modified_at) : undefined,
         });

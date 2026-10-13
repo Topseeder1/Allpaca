@@ -180,8 +180,9 @@ func getTensorInfoFromManifest(mf *manifest.Manifest) ([]api.Tensor, error) {
 			continue
 		}
 
-		// Read the safetensors header from the blob
-		blobPath, err := manifest.BlobsPath(layer.Digest)
+		// Read the safetensors header from the blob. Resolve across all model
+		// roots: the model may live in the Allpaca lane.
+		blobPath, err := manifest.FindBlobPath(layer.Digest)
 		if err != nil {
 			continue
 		}

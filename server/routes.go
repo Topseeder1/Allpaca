@@ -1380,14 +1380,17 @@ func (s *Server) CopyHandler(c *gin.Context) {
 }
 
 func (s *Server) HeadBlobHandler(c *gin.Context) {
-	path, err := manifest.BlobsPath(c.Param("digest"))
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if _, err := os.Stat(path); err != nil {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("blob %q not found", c.Param("digest"))})
+	// Resolve the blob across all model roots (ALLPACA_MODELS first, then
+	// OLLAMA_MODELS). BlobsPath is pinned to the Ollama root and would 404 for
+	// a blob that only exists in the Allpaca lane; FindBlobPath spans both.
+	// FindBlobPath wraps os.ErrNotExist when the digest is absent from every
+	// root, which maps to a 404.
+	if _, err := manifest.FindBlobPath(c.Param("digest")); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("blob %q not found", c.Param("digest"))})
+		} else {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
 		return
 	}
 

@@ -27,6 +27,9 @@ type ChatResponse struct {
 
 type Model struct {
 	Model      string     `json:"model"`
+	// Origin identifies which models directory the model resolved from
+	// ("allpaca" or "ollama"). Omitted when unknown.
+	Origin     string     `json:"origin,omitempty"`
 	Digest     string     `json:"digest,omitempty"`
 	ModifiedAt *time.Time `json:"modified_at,omitempty"`
 }

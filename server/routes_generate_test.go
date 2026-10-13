@@ -1719,7 +1719,7 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 			Files: map[string]string{"file.gguf": digest},
 			Template: `{{- range .Messages }}
 {{- if eq .Role "user" }}user: {{ .Content }}
-{{ else if eq .Role "assistant" }}assistant: {{ if .Thinking }} thinking{{ .Thinking }}</think>{{ end }}{{ .Content }}
+{{ else if eq .Role "assistant" }}assistant: {{ if .Thinking }} thinking{{ .Thinking }}{{ end }}{{ .Content }}
 {{ end }}{{ end }} thinking`,
 			Stream: &stream,
 		})
@@ -1796,7 +1796,7 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 
 	testChatRequest(t, "no thinking content",
 		"What is 2+2?",
-		"</think> The answer is 4.",
+		" The answer is 4.",
 		"",
 		"The answer is 4.",
 		true)
@@ -1895,7 +1895,7 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 			switch callNum {
 			case 1:
 				fn(llm.CompletionResponse{
-					Content:            " I am thinking through this problem. </think> {\"answer\":\"42\"}",
+					Content:            " I am thinking through this problem. {\"answer\":\"42\"}",
 					Done:               false,
 					PromptEvalCount:    1,
 					PromptEvalDuration: 1,
@@ -1998,7 +1998,7 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 			switch callNum {
 			case 1:
 				fn(llm.CompletionResponse{
-					Content:            " I am thinking through this problem. </think> {\"answer\":\"42\"}",
+					Content:            " I am thinking through this problem. {\"answer\":\"42\"}",
 					Done:               false,
 					PromptEvalCount:    1,
 					PromptEvalDuration: 1,
@@ -2405,7 +2405,7 @@ func TestImageGenerateStreamFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := manifest.WriteManifest(n.String(), configLayer, nil); err != nil {
+	if err := manifest.WriteManifest(n, configLayer, nil); err != nil {
 		t.Fatal(err)
 	}
 
