@@ -69,28 +69,39 @@ func NewLayer(r io.Reader, mediatype string) (Layer, error) {
 	}, nil
 }
 
+// NewLayerFromLayer builds a Layer for a blob that already exists on disk,
+// searching every models root in precedence order. If the blob is not present
+// in any root, the layer is returned with Size -1 and no error, matching the
+// behavior callers rely on for manifests that point at remote blobs.
 func NewLayerFromLayer(digest, mediatype, from string) (Layer, error) {
 	if digest == "" {
 		return Layer{}, errors.New("creating new layer from layer with empty digest")
 	}
 
-	blob, err := BlobsPath(digest)
-	if err != nil {
-		return Layer{}, err
-	}
-
-	fi, err := os.Stat(blob)
-	if err != nil {
-		return Layer{}, err
-	}
-
-	return Layer{
+	layer := Layer{
 		MediaType: mediatype,
 		Digest:    digest,
-		Size:      fi.Size(),
+		Size:      -1,
 		From:      from,
-		Status:    fmt.Sprintf("using existing layer %s", digest),
-	}, nil
+	}
+
+	blobPath, err := FindBlobPath(digest)
+	if err != nil {
+		// Blob not present in any root: keep Size -1, matching prior behavior
+		if errors.Is(err, ErrManifestNotFound) {
+			return layer, nil
+		}
+		return Layer{}, err
+	}
+
+	fi, err := os.Stat(blobPath)
+	if err != nil {
+		return Layer{}, err
+	}
+	layer.Size = fi.Size()
+	layer.Status = fmt.Sprintf("using existing layer %s", digest)
+
+	return layer, nil
 }
 
 func (l *Layer) Open() (io.ReadSeekCloser, error) {
@@ -98,12 +109,14 @@ func (l *Layer) Open() (io.ReadSeekCloser, error) {
 		return nil, errors.New("opening layer with empty digest")
 	}
 
-	blob, err := BlobsPath(l.Digest)
+	// Blobs may live in any models root (allpaca or ollama), so resolve
+	// across roots instead of assuming the OLLAMA_MODELS root
+	blobPath, err := FindBlobPath(l.Digest)
 	if err != nil {
 		return nil, err
 	}
 
-	return os.Open(blob)
+	return os.Open(blobPath)
 }
 
 func (l *Layer) Remove() error {
@@ -111,25 +124,18 @@ func (l *Layer) Remove() error {
 		return nil
 	}
 
-	// Ignore corrupt manifests to avoid blocking deletion of layers that are freshly orphaned
-	ms, err := Manifests(true)
+	// Ignore corrupt manifests to avoid blocking deletion of layers that are
+	// freshly orphaned
+	referenced, err := digestReferenced(l.Digest)
 	if err != nil {
 		return err
 	}
-
-	for _, m := range ms {
-		for _, layer := range append(m.Layers, m.Config) {
-			if layer.Digest == l.Digest {
-				// something is using this layer
-				return nil
-			}
-		}
+	if referenced {
+		// something is using this layer
+		return nil
 	}
 
-	blob, err := BlobsPath(l.Digest)
-	if err != nil {
-		return err
-	}
+	removeBlobEverywhere(l.Digest)
 
-	return os.Remove(blob)
+	return nil
 }

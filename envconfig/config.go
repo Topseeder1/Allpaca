@@ -97,6 +97,22 @@ func Models() string {
 	return filepath.Join(home, ".ollama", "models")
 }
 
+// AllpacaModels returns the path to the Allpaca models directory. Configured via
+// the ALLPACA_MODELS environment variable. It is checked BEFORE the ollama models
+// directory; on name collision the Allpaca copy wins. Default is $HOME/.allpaca/models
+func AllpacaModels() string {
+	if s := Var("ALLPACA_MODELS"); s != "" {
+		return s
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+
+	return filepath.Join(home, ".allpaca", "models")
+}
+
 // KeepAlive returns the duration that models stay loaded in memory. KeepAlive can be configured via the OLLAMA_KEEP_ALIVE environment variable.
 // Negative values are treated as infinite. Zero is treated as no keep alive.
 // Default is 5 minutes.
@@ -273,6 +289,7 @@ type EnvVar struct {
 
 func AsMap() map[string]EnvVar {
 	ret := map[string]EnvVar{
+		"ALLPACA_MODELS":           {"ALLPACA_MODELS", AllpacaModels(), "The path to the Allpaca models directory (checked before OLLAMA_MODELS; default ~/.allpaca/models)"},
 		"OLLAMA_DEBUG":             {"OLLAMA_DEBUG", LogLevel(), "Show additional debug information (e.g. OLLAMA_DEBUG=1)"},
 		"OLLAMA_FLASH_ATTENTION":   {"OLLAMA_FLASH_ATTENTION", FlashAttention(false), "Enabled flash attention"},
 		"OLLAMA_KV_CACHE_TYPE":     {"OLLAMA_KV_CACHE_TYPE", KvCacheType(), "Quantization type for the K/V cache (default: f16)"},

@@ -48,6 +48,9 @@ func TestIsLocalModel(t *testing.T) {
 }
 
 func TestIsLocalServer(t *testing.T) {
+	// Locality is hostname-based only (matching what api.ClientFromEnvironment
+	// actually dials). Ports are never sniffed — a remote host on the fork's
+	// port is still remote.
 	tests := []struct {
 		name     string
 		host     string
@@ -59,27 +62,42 @@ func TestIsLocalServer(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "localhost",
-			host:     "http://localhost:11434",
+			name:     "localhost default port",
+			host:     "http://localhost:11435",
 			expected: true,
 		},
 		{
-			name:     "127.0.0.1",
-			host:     "http://127.0.0.1:11434",
-			expected: true,
-		},
-		{
-			name:     "custom port on localhost",
+			name:     "localhost custom port",
 			host:     "http://localhost:8080",
 			expected: true, // localhost is always considered local
 		},
 		{
-			name:     "remote host",
-			host:     "http://ollama.example.com:11434",
-			expected: true, // has :11434
+			name:     "127.0.0.1 default port",
+			host:     "http://127.0.0.1:11435",
+			expected: true,
 		},
 		{
-			name:     "remote host different port",
+			name:     "ipv6 loopback",
+			host:     "[::1]:11435",
+			expected: true,
+		},
+		{
+			name:     "wildcard bind",
+			host:     "0.0.0.0:9999",
+			expected: true,
+		},
+		{
+			name:     "remote host on fork port",
+			host:     "http://ollama.example.com:11435",
+			expected: false,
+		},
+		{
+			name:     "remote host on old upstream port",
+			host:     "http://ollama.example.com:11434",
+			expected: false, // port is never sniffed; remote hostname stays remote
+		},
+		{
+			name:     "remote host custom port",
 			host:     "http://ollama.example.com:8080",
 			expected: false,
 		},

@@ -43,7 +43,7 @@ func TestConvertFromSafetensors(t *testing.T) {
 		"added_tokens": [
 			{
 				"id": 0,
-				"content": "<|endoftext|>",
+				"content": "",
 				"single_word": false,
 				"lstrip": false,
 				"rstrip": false,
@@ -109,6 +109,7 @@ func TestConvertFromSafetensors(t *testing.T) {
 func TestRemoteURL(t *testing.T) {
 	tests := []struct {
 		name     string
+		host     string // OLLAMA_HOST to pin; empty keeps the fork default (127.0.0.1:11435)
 		input    string
 		expected string
 		hasError bool
@@ -116,25 +117,46 @@ func TestRemoteURL(t *testing.T) {
 		{
 			name:     "absolute path",
 			input:    "/foo/bar",
-			expected: "http://localhost:11434/foo/bar",
+			expected: "http://127.0.0.1:11435/foo/bar",
 			hasError: false,
 		},
 		{
 			name:     "absolute path with cleanup",
 			input:    "/foo/../bar",
-			expected: "http://localhost:11434/bar",
+			expected: "http://127.0.0.1:11435/bar",
 			hasError: false,
 		},
 		{
 			name:     "root path",
 			input:    "/",
-			expected: "http://localhost:11434/",
+			expected: "http://127.0.0.1:11435/",
+			hasError: false,
+		},
+		{
+			name:     "bare path follows OLLAMA_HOST",
+			host:     "http://127.0.0.1:9999",
+			input:    "/foo/bar",
+			expected: "http://127.0.0.1:9999/foo/bar",
+			hasError: false,
+		},
+		{
+			name:     "bare path normalizes wildcard bind",
+			host:     "0.0.0.0:9999",
+			input:    "/foo/bar",
+			expected: "http://127.0.0.1:9999/foo/bar",
 			hasError: false,
 		},
 		{
 			name:     "host without scheme",
 			input:    "example.com",
-			expected: "http://example.com:11434",
+			expected: "http://example.com:11435",
+			hasError: false,
+		},
+		{
+			name:     "no-port host follows OLLAMA_HOST port",
+			host:     "http://127.0.0.1:9999",
+			input:    "http://example.com",
+			expected: "http://example.com:9999",
 			hasError: false,
 		},
 		{
@@ -170,13 +192,13 @@ func TestRemoteURL(t *testing.T) {
 		{
 			name:     "URL with only host",
 			input:    "http://example.com",
-			expected: "http://example.com:11434",
+			expected: "http://example.com:11435",
 			hasError: false,
 		},
 		{
 			name:     "URL with root path cleaned",
 			input:    "http://example.com/",
-			expected: "http://example.com:11434",
+			expected: "http://example.com:11435",
 			hasError: false,
 		},
 		{
@@ -188,25 +210,27 @@ func TestRemoteURL(t *testing.T) {
 		{
 			name:     "empty string",
 			input:    "",
-			expected: "http://localhost:11434",
+			expected: "http://localhost:11435",
 			hasError: false,
 		},
 		{
 			name:     "host with scheme but no port",
 			input:    "http://localhost",
-			expected: "http://localhost:11434",
+			expected: "http://localhost:11435",
 			hasError: false,
 		},
 		{
 			name:     "complex path cleanup",
 			input:    "/a/b/../../c/./d",
-			expected: "http://localhost:11434/c/d",
+			expected: "http://127.0.0.1:11435/c/d",
 			hasError: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("OLLAMA_HOST", tt.host)
+
 			result, err := remoteURL(tt.input)
 
 			if tt.hasError {
@@ -229,13 +253,15 @@ func TestRemoteURL(t *testing.T) {
 }
 
 func TestRemoteURL_Idempotent(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "")
+
 	// Test that applying remoteURL twice gives the same result as applying it once
 	testInputs := []string{
 		"/foo/bar",
 		"example.com",
 		"https://example.com:8080/path",
 		"ollama.com",
-		"http://localhost:11434",
+		"http://localhost:11435",
 	}
 
 	for _, input := range testInputs {

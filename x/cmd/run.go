@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -44,22 +45,37 @@ func isLocalModel(modelName string) bool {
 	return !strings.HasSuffix(modelName, "-cloud")
 }
 
-// isLocalServer checks if connecting to a local Ollama server.
+// isLocalServer checks if connecting to a local server. Locality is decided by
+// hostname only: unset hosts, "localhost", loopback IPs, and unspecified
+// (wildcard) binds count as local. Ports are never sniffed, so a remote host
+// on the fork's default port is still remote.
 // TODO: Could also check other indicators of local vs cloud server
 func isLocalServer() bool {
-	host := os.Getenv("OLLAMA_HOST")
+	host := strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
 	if host == "" {
-		return true // Default is localhost:11434
+		return true // Default is loopback on the fork's port
 	}
 
-	// Parse the URL to check host
+	// url.Parse misreads scheme-less hosts ("example.com:8080") as a
+	// scheme/opaque pair (and outright errors on "0.0.0.0:8080"), so anchor
+	// them into authority form before parsing.
+	if !strings.Contains(host, "://") && !strings.HasPrefix(host, "//") {
+		host = "//" + host
+	}
+
 	parsed, err := url.Parse(host)
 	if err != nil {
 		return true // If can't parse, assume local
 	}
 
 	hostname := parsed.Hostname()
-	return hostname == "localhost" || hostname == "127.0.0.1" || strings.Contains(parsed.Host, ":11434")
+	if hostname == "" || hostname == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(hostname); ip != nil {
+		return ip.IsLoopback() || ip.IsUnspecified()
+	}
+	return false
 }
 
 // truncateToolOutput truncates tool output to prevent context overflow.

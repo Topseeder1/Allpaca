@@ -18,19 +18,19 @@ func TestClientFromEnvironment(t *testing.T) {
 	}
 
 	testCases := map[string]*testCase{
-		"empty":                      {value: "", expect: "http://127.0.0.1:11434"},
-		"only address":               {value: "1.2.3.4", expect: "http://1.2.3.4:11434"},
+		"empty":                      {value: "", expect: "http://127.0.0.1:11435"},
+		"only address":               {value: "1.2.3.4", expect: "http://1.2.3.4:11435"},
 		"only port":                  {value: ":1234", expect: "http://:1234"},
 		"address and port":           {value: "1.2.3.4:1234", expect: "http://1.2.3.4:1234"},
 		"scheme http and address":    {value: "http://1.2.3.4", expect: "http://1.2.3.4:80"},
 		"scheme https and address":   {value: "https://1.2.3.4", expect: "https://1.2.3.4:443"},
 		"scheme, address, and port":  {value: "https://1.2.3.4:1234", expect: "https://1.2.3.4:1234"},
-		"hostname":                   {value: "example.com", expect: "http://example.com:11434"},
+		"hostname":                   {value: "example.com", expect: "http://example.com:11435"},
 		"hostname and port":          {value: "example.com:1234", expect: "http://example.com:1234"},
 		"scheme http and hostname":   {value: "http://example.com", expect: "http://example.com:80"},
 		"scheme https and hostname":  {value: "https://example.com", expect: "https://example.com:443"},
 		"scheme, hostname, and port": {value: "https://example.com:1234", expect: "https://example.com:1234"},
-		"trailing slash":             {value: "example.com/", expect: "http://example.com:11434"},
+		"trailing slash":             {value: "example.com/", expect: "http://example.com:11435"},
 		"trailing slash port":        {value: "example.com:1234/", expect: "http://example.com:1234"},
 	}
 

@@ -62,7 +62,7 @@ func shouldUseHarmony(model *Model) bool {
 	if slices.Contains([]string{"gptoss", "gpt-oss"}, model.Config.ModelFamily) {
 		// heuristic to check whether the template expects to be parsed via harmony:
 		// search for harmony tags that are nearly always used
-		if model.Template.Contains("<|start|>") && model.Template.Contains("<|end|>") {
+		if model.Template.Contains("") && model.Template.Contains("") {
 			return true
 		}
 	}
@@ -1318,6 +1318,7 @@ func (s *Server) ListHandler(c *gin.Context) {
 			Name:        n.DisplayShortest(),
 			RemoteModel: cf.RemoteModel,
 			RemoteHost:  cf.RemoteHost,
+			Origin:      string(m.Origin()),
 			Size:        m.Size(),
 			Digest:      m.Digest(),
 			ModifiedAt:  m.FileInfo().ModTime(),
@@ -2317,7 +2318,7 @@ func (s *Server) ChatHandler(c *gin.Context) {
 					res.Message.Thinking = thinkingContent
 					tb.WriteString(thinkingContent)
 					// emit the collected thinking text before restarting with structured outputs and clear unstructured content
-					// to avoid leaking mixed tokens like "</think>Hello"
+					// to avoid leaking mixed tokens like "Hello"
 					if structuredOutputsState == structuredOutputsState_None && req.Format != nil && tb.String() != "" && remainingContent != "" {
 						structuredOutputsState = structuredOutputsState_ReadyToApply
 						res.Message.Content = ""
@@ -2393,7 +2394,7 @@ func (s *Server) ChatHandler(c *gin.Context) {
 				// model continue thinking or ending thinking and outputting the final message.
 				// TODO(parthsareen): consider adding prefill disambiguation logic to the renderer for structured outputs.
 				if shouldUseHarmony(m) || (builtinParser != nil && m.Config.Parser == "harmony") {
-					prompt += "<|end|><|start|>assistant<|channel|>final<|message|>"
+					prompt += "assistantfinal"
 				}
 				continue
 			}
@@ -2487,7 +2488,7 @@ func filterThinkTags(msgs []api.Message, m *Model) []api.Message {
 				// for all thinking models (not just qwen3 & deepseek-r1) since it tends
 				// to save tokens and improve quality.
 				thinkingState := &thinking.Parser{
-					OpeningTag: "<think>",
+					OpeningTag: " thinking",
 					ClosingTag: "</think>",
 				}
 				_, content := thinkingState.AddContent(msg.Content)

@@ -51,7 +51,10 @@ func parseFromModel(ctx context.Context, name model.Name, fn func(api.ProgressRe
 		case "application/vnd.ollama.image.model",
 			"application/vnd.ollama.image.projector",
 			"application/vnd.ollama.image.adapter":
-			blobpath, err := manifest.BlobsPath(layer.Digest)
+			// Resolve the blob across all model roots (ALLPACA_MODELS first,
+			// then OLLAMA_MODELS). BlobsPath pins reads to the Ollama root and
+			// would break Allpaca-lane models that resolve via the manifest.
+			blobpath, err := manifest.FindBlobPath(layer.Digest)
 			if err != nil {
 				return nil, err
 			}

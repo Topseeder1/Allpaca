@@ -259,11 +259,21 @@ func (s *Server) CreateHandler(c *gin.Context) {
 }
 
 func remoteURL(raw string) (string, error) {
-	// Special‑case: user supplied only a path ("/foo/bar").
+	// Self-URLs and unresolved ports derive from OLLAMA_HOST via envconfig —
+	// never a hardcoded port.
+	base := envconfig.Host()
+	baseHost := base.Hostname()
+	if ip := net.ParseIP(baseHost); ip != nil && ip.IsUnspecified() {
+		// A wildcard bind still targets this machine for self-URLs.
+		baseHost = "127.0.0.1"
+	}
+	basePort := base.Port()
+
+	// Special case: user supplied only a path ("/foo/bar") — a self-URL.
 	if strings.HasPrefix(raw, "/") {
 		return (&url.URL{
-			Scheme: "http",
-			Host:   net.JoinHostPort("localhost", "11434"),
+			Scheme: base.Scheme,
+			Host:   net.JoinHostPort(baseHost, basePort),
 			Path:   path.Clean(raw),
 		}).String(), nil
 	}
@@ -287,9 +297,13 @@ func remoteURL(raw string) (string, error) {
 
 	hostPart, portPart, err := net.SplitHostPort(u.Host)
 	if err == nil {
+		if ip := net.ParseIP(hostPart); ip != nil && ip.IsUnspecified() {
+			hostPart = "127.0.0.1"
+		}
 		u.Host = net.JoinHostPort(hostPart, portPart)
 	} else {
-		u.Host = net.JoinHostPort(u.Host, "11434")
+		// No port supplied — inherit the running server's port (from OLLAMA_HOST).
+		u.Host = net.JoinHostPort(u.Host, basePort)
 	}
 
 	if u.Path != "" {

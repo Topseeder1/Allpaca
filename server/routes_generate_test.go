@@ -1713,14 +1713,14 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 			{Name: "output.weight", Shape: []uint64{1}, WriterTo: bytes.NewReader(make([]byte, 4))},
 		})
 
-		// Create model with thinking template that adds <think> at the end
+		// Create model with thinking template that adds  thinking at the end
 		w := createRequest(t, s.CreateHandler, api.CreateRequest{
 			Model: "test-thinking",
 			Files: map[string]string{"file.gguf": digest},
 			Template: `{{- range .Messages }}
 {{- if eq .Role "user" }}user: {{ .Content }}
-{{ else if eq .Role "assistant" }}assistant: {{ if .Thinking }}<think>{{ .Thinking }}</think>{{ end }}{{ .Content }}
-{{ end }}{{ end }}<think>`,
+{{ else if eq .Role "assistant" }}assistant: {{ if .Thinking }} thinking{{ .Thinking }}</think>{{ end }}{{ .Content }}
+{{ end }}{{ end }} thinking`,
 			Stream: &stream,
 		})
 
@@ -1779,17 +1779,17 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 		})
 	}
 
-	// Test cases - Note: Template adds <think> at the end, and leading whitespace after <think> is eaten by the parser
+	// Test cases - Note: Template adds  thinking at the end, and leading whitespace after  thinking is eaten by the parser
 	testChatRequest(t, "basic thinking response",
 		"Help me solve this problem",
-		" Let me think about this step by step... </think> The answer is 42.",
+		" Let me think about this step by step... The answer is 42.",
 		"Let me think about this step by step... ",
 		"The answer is 42.",
 		true)
 
 	testChatRequest(t, "thinking with multiple sentences",
 		"Explain quantum computing",
-		" First, I need to understand the basics. Quantum bits can be in superposition. </think> Quantum computing uses quantum mechanics principles.",
+		" First, I need to understand the basics. Quantum bits can be in superposition. Quantum computing uses quantum mechanics principles.",
 		"First, I need to understand the basics. Quantum bits can be in superposition. ",
 		"Quantum computing uses quantum mechanics principles.",
 		true)
@@ -1801,7 +1801,7 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 		"The answer is 4.",
 		true)
 
-	// Test streaming response with template-added <think>
+	// Test streaming response with template-added  thinking
 	t.Run("streaming with thinking", func(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -1809,16 +1809,16 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 		mock.CompletionFn = func(ctx context.Context, r llm.CompletionRequest, fn func(r llm.CompletionResponse)) error {
 			defer wg.Done()
 
-			// Verify the prompt ends with <think> due to template
-			if !strings.HasSuffix(r.Prompt, "<think>") {
-				t.Errorf("expected prompt to end with <think>, got: %q", r.Prompt)
+			// Verify the prompt ends with  thinking due to template
+			if !strings.HasSuffix(r.Prompt, " thinking") {
+				t.Errorf("expected prompt to end with  thinking, got: %q", r.Prompt)
 			}
 
 			// Simulate streaming chunks
 			responses := []llm.CompletionResponse{
 				{Content: " I need to consider", Done: false, PromptEvalCount: 1, PromptEvalDuration: 1},
 				{Content: " multiple factors here...", Done: false, PromptEvalCount: 1, PromptEvalDuration: 1},
-				{Content: " </think> Based on my analysis,", Done: false, PromptEvalCount: 1, PromptEvalDuration: 1},
+				{Content: " Based on my analysis,", Done: false, PromptEvalCount: 1, PromptEvalDuration: 1},
 				{Content: " the solution is straightforward.", Done: true, DoneReason: llm.DoneReasonStop, PromptEvalCount: 1, PromptEvalDuration: 1, EvalCount: 1, EvalDuration: 1},
 			}
 
@@ -1863,7 +1863,7 @@ func TestChatWithPromptEndingInThinkTag(t *testing.T) {
 			allContent.WriteString(resp.Message.Content)
 		}
 
-		// Note: Leading whitespace after <think> is eaten by the parser
+		// Note: Leading whitespace after  thinking is eaten by the parser
 		if got := allThinking.String(); got != "I need to consider multiple factors here... " {
 			t.Errorf("expected thinking %q, got %q", "I need to consider multiple factors here... ", got)
 		}
@@ -2405,7 +2405,7 @@ func TestImageGenerateStreamFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := manifest.WriteManifest(n, configLayer, nil); err != nil {
+	if err := manifest.WriteManifest(n.String(), configLayer, nil); err != nil {
 		t.Fatal(err)
 	}
 

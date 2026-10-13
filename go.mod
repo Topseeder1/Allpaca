@@ -1,4 +1,4 @@
-module github.com/ollama/ollama
+module github.com/topseeder1/allpaca
 
 go 1.24.1
 

@@ -812,10 +812,13 @@ type ListModelResponse struct {
 	Model       string       `json:"model"`
 	RemoteModel string       `json:"remote_model,omitempty"`
 	RemoteHost  string       `json:"remote_host,omitempty"`
-	ModifiedAt  time.Time    `json:"modified_at"`
-	Size        int64        `json:"size"`
-	Digest      string       `json:"digest"`
-	Details     ModelDetails `json:"details,omitempty"`
+	// Origin identifies which models directory the model resolved from
+	// ("allpaca" or "ollama"). Omitted when unknown.
+	Origin     string       `json:"origin,omitempty"`
+	ModifiedAt time.Time    `json:"modified_at"`
+	Size       int64        `json:"size"`
+	Digest     string       `json:"digest"`
+	Details    ModelDetails `json:"details,omitempty"`
 }
 
 // ProcessModelResponse is a single model description in [ProcessResponse].
