@@ -48,7 +48,7 @@ function checkEnv {
     } else {
         $script:HIP_PATH=(get-item "C:\Program Files\AMD\ROCm\*\bin\" -ea 'silentlycontinue' | sort-object -Descending)
     }
-    
+
     $inoSetup=(get-item "C:\Program Files*\Inno Setup*\")
     if ($inoSetup.length -gt 0) {
         $script:INNO_SETUP_DIR=$inoSetup[0]
@@ -78,7 +78,7 @@ function checkEnv {
     } else {
         $script:PKG_VERSION="0.0.0"
     }
-    write-host "Building Ollama $script:VERSION with package version $script:PKG_VERSION"
+    write-host "Building Allpaca $script:VERSION with package version $script:PKG_VERSION"
 
     # Note: Windows Kits 10 signtool crashes with GCP's plugin
     if ($null -eq $env:SIGN_TOOL) {
@@ -93,8 +93,19 @@ function checkEnv {
         write-host "Code signing disabled - please set KEY_CONTAINERS to sign and copy ollama_inc.crt to the top of the source tree"
     }
     $script:JOBS=([Environment]::ProcessorCount)
-}
 
+    # Preflight: a running exe is locked by Windows and cannot be replaced by
+    # the build. Fail fast here with clear instructions instead of failing
+    # silently mid-step.
+    $running = Get-Process -Name allpaca,allpaca-app,windows-ollama-app-amd64 -ErrorAction SilentlyContinue
+    if ($running) {
+        write-host "Build stopped: the app or server is currently running and its exe is locked."
+        write-host "Stop the running instances first, then rerun this script:"
+        write-host "  taskkill /im windows-ollama-app-amd64.exe /f"
+        write-host "  taskkill /im allpaca.exe /f"
+        exit 1
+    }
+}
 
 function cpu {
     mkdir -Force -path "${script:DIST_DIR}\" | Out-Null
@@ -119,7 +130,7 @@ function cuda11 {
     $cudaMajorVer="11"
     if ($script:ARCH -ne "arm64") {
         if ("$script:CUDA_DIRS".Contains("v$cudaMajorVer")) {
-            foreach ($d in $Script:CUDA_DIRS){ 
+            foreach ($d in $Script:CUDA_DIRS){
                 if ($d.FullName.Contains("v$cudaMajorVer")) {
                     if (test-path -literalpath (join-path -path $d -childpath "nvcc.exe" ) ) {
                         $cuda=($d.FullName|split-path -parent)
@@ -151,7 +162,7 @@ function cudaCommon {
     mkdir -Force -path "${script:DIST_DIR}\" | Out-Null
     if ($script:ARCH -ne "arm64") {
         if ("$script:CUDA_DIRS".Contains("v$cudaMajorVer")) {
-            foreach ($d in $Script:CUDA_DIRS){ 
+            foreach ($d in $Script:CUDA_DIRS){
                 if ($d.FullName.Contains("v$cudaMajorVer")) {
                     if (test-path -literalpath (join-path -path $d -childpath "nvcc.exe" ) ) {
                         $cuda=($d.FullName|split-path -parent)
@@ -161,6 +172,9 @@ function cudaCommon {
             }
             write-host "Building CUDA v$cudaMajorVer backend libraries $cuda"
             $env:CUDAToolkit_ROOT=$cuda
+            # CUDA 13's CCCL headers require MSVC's conforming preprocessor.
+            # Without this the ggml-cuda build fails with error C1189.
+            $env:CL="/Zc:preprocessor"
             & cmake -B build\cuda_v$cudaMajorVer --preset "CUDA $cudaMajorVer" -T cuda="$cuda" --install-prefix "$script:DIST_DIR"
             if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
             & cmake --build build\cuda_v$cudaMajorVer --target ggml-cuda --config Release --parallel $script:JOBS
@@ -230,14 +244,19 @@ function vulkan {
 
 function ollama {
     mkdir -Force -path "${script:DIST_DIR}\" | Out-Null
-    write-host "Building ollama CLI"
-    & go build -trimpath -ldflags "-s -w -X=github.com/ollama/ollama/version.Version=$script:VERSION -X=github.com/ollama/ollama/server.mode=release" .
-    if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
-    cp .\ollama.exe "${script:DIST_DIR}\"
+    write-host "Building allpaca CLI"
+    # Build straight to the destination so nothing is left behind at the repo
+    # root and no move step can fail on a locked output.
+    & go build -trimpath -ldflags "-s -w -X=github.com/topseeder1/allpaca/version.Version=$script:VERSION -X=github.com/topseeder1/allpaca/server.mode=release" -o "${script:DIST_DIR}\allpaca.exe" .
+    if ($LASTEXITCODE -ne 0) {
+        write-host "Build Failed (go build exited $LASTEXITCODE)."
+        write-host "If the go error mentions 'Access is denied', allpaca.exe is still running - stop it and retry."
+        exit($LASTEXITCODE)
+    }
 }
 
 function app {
-    write-host "Building Ollama App $script:VERSION with package version $script:PKG_VERSION"
+    write-host "Building Allpaca App $script:VERSION with package version $script:PKG_VERSION"
 
     if (!(Get-Command npm -ErrorAction SilentlyContinue)) {
         write-host "npm is not installed. Please install Node.js and npm first:"
@@ -259,14 +278,14 @@ function app {
 
     Push-Location app/ui/app
     npm install
-    if ($LASTEXITCODE -ne 0) { 
+    if ($LASTEXITCODE -ne 0) {
         write-host "ERROR: npm install failed with exit code $LASTEXITCODE"
         exit $LASTEXITCODE
     }
 
     write-host "Building React application..."
     npm run build
-    if ($LASTEXITCODE -ne 0) { 
+    if ($LASTEXITCODE -ne 0) {
         write-host "ERROR: npm run build failed with exit code $LASTEXITCODE"
         exit $LASTEXITCODE
     }
@@ -288,14 +307,14 @@ function app {
     write-host "Running go generate"
     & go generate ./...
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
-	& go build -trimpath -ldflags "-s -w -H windowsgui -X=github.com/ollama/ollama/app/version.Version=$script:VERSION" -o .\dist\windows-ollama-app-${script:ARCH}.exe ./app/cmd/app/
+    & go build -trimpath -ldflags "-s -w -H windowsgui -X=github.com/topseeder1/allpaca/app/version.Version=$script:VERSION" -o .\dist\windows-ollama-app-${script:ARCH}.exe ./app/cmd/app/
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
 function deps {
     write-host "Download MSVC Redistributables"
-    mkdir -Force -path "${script:SRC_DIR}\dist\\windows-arm64" | Out-Null
-    mkdir -Force -path "${script:SRC_DIR}\dist\\windows-amd64" | Out-Null
+    mkdir -Force -path "${script:SRC_DIR}\dist\windows-arm64" | Out-Null
+    mkdir -Force -path "${script:SRC_DIR}\dist\windows-amd64" | Out-Null
     invoke-webrequest -Uri "https://aka.ms/vs/17/release/vc_redist.arm64.exe" -OutFile  "${script:SRC_DIR}\dist\windows-arm64\vc_redist.arm64.exe"
     invoke-webrequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile  "${script:SRC_DIR}\dist\windows-amd64\vc_redist.x64.exe"
     write-host "Done."
@@ -377,7 +396,7 @@ try {
         for ( $i = 0; $i -lt $args.count; $i++ ) {
             write-host "running build step $($args[$i])"
             & $($args[$i])
-        } 
+        }
     }
 } catch {
     write-host "Build Failed"

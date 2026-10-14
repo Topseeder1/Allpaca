@@ -82,7 +82,24 @@ set(GGML_CPU ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src)
 set_property(TARGET ggml PROPERTY EXCLUDE_FROM_ALL TRUE)
 
-get_target_property(CPU_VARIANTS ggml-cpu MANUALLY_ADDED_DEPENDENCIES)
+# The refreshed upstream ggml no longer creates a "ggml-cpu" aggregate target
+# when GGML_CPU_ALL_VARIANTS is on. It registers every CPU variant backend
+# (ggml-cpu-x64, ggml-cpu-sse42, ...) in the GGML_AVAILABLE_BACKENDS cache list
+# and attaches them to the "ggml" registry target instead. Collect the
+# variants from that list and rebuild the aggregate under the old name so the
+# install component and `cmake --build --target ggml-cpu` keep working.
+set(CPU_VARIANTS "")
+if(GGML_CPU_ALL_VARIANTS)
+    foreach(_backend ${GGML_AVAILABLE_BACKENDS})
+        if(_backend MATCHES "^ggml-cpu")
+            list(APPEND CPU_VARIANTS ${_backend})
+        endif()
+    endforeach()
+    if(CPU_VARIANTS)
+        add_custom_target(ggml-cpu)
+        add_dependencies(ggml-cpu ${CPU_VARIANTS})
+    endif()
+endif()
 if(NOT CPU_VARIANTS)
     set(CPU_VARIANTS "ggml-cpu")
 endif()
@@ -102,6 +119,9 @@ if(CMAKE_CUDA_COMPILER)
     endif()
 
     find_package(CUDAToolkit)
+    # New ggml gates backend subdirectories on GGML_<BACKEND>; arm it before
+    # the direct add_subdirectory so the target always exists.
+    set(GGML_CUDA ON)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-cuda)
     install(TARGETS ggml-cuda
         RUNTIME_DEPENDENCIES
@@ -133,6 +153,7 @@ if(CMAKE_HIP_COMPILER)
 
     if(AMDGPU_TARGETS)
         find_package(hip REQUIRED)
+        set(GGML_HIP ON)
         add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-hip)
 
         if (WIN32)
@@ -167,6 +188,7 @@ endif()
 if(NOT APPLE)
     find_package(Vulkan)
     if(Vulkan_FOUND)
+        set(GGML_VULKAN ON)
         add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/ggml-vulkan)
         install(TARGETS ggml-vulkan
             RUNTIME_DEPENDENCIES

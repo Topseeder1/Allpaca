@@ -172,8 +172,10 @@ func New(modelPath string, params ml.BackendParams) (ml.Backend, error) {
 	requiredMemory.CPU.Name = C.GoString(C.ggml_backend_dev_name(cpuDeviceBufferType.d))
 	var props C.struct_ggml_backend_dev_props
 	C.ggml_backend_dev_get_props(cpuDeviceBufferType.d, &props)
-	requiredMemory.CPU.ID = C.GoString(props.id)
-	requiredMemory.CPU.Library = C.GoString(props.library)
+	// upstream vanilla ggml dropped the fork's extra dev_props fields; the
+	// device is identified by its PCI id and its owning backend registry
+	requiredMemory.CPU.ID = C.GoString(props.device_id)
+	requiredMemory.CPU.Library = C.GoString(C.ggml_backend_reg_name(C.ggml_backend_dev_backend_reg(cpuDeviceBufferType.d)))
 	requiredMemory.CPU.Weights = make([]uint64, blocks+1)
 	requiredMemory.CPU.Cache = make([]uint64, blocks+1)
 
@@ -191,8 +193,8 @@ func New(modelPath string, params ml.BackendParams) (ml.Backend, error) {
 		requiredMemory.GPUs[i].Name = C.GoString(C.ggml_backend_dev_name(d))
 		var props C.struct_ggml_backend_dev_props
 		C.ggml_backend_dev_get_props(d, &props)
-		requiredMemory.GPUs[i].ID = C.GoString(props.id)
-		requiredMemory.GPUs[i].Library = C.GoString(props.library)
+		requiredMemory.GPUs[i].ID = C.GoString(props.device_id)
+		requiredMemory.GPUs[i].Library = C.GoString(C.ggml_backend_reg_name(C.ggml_backend_dev_backend_reg(d)))
 		requiredMemory.GPUs[i].Weights = make([]uint64, blocks+1)
 		requiredMemory.GPUs[i].Cache = make([]uint64, blocks+1)
 	}
@@ -380,14 +382,15 @@ func New(modelPath string, params ml.BackendParams) (ml.Backend, error) {
 
 	maxGraphNodes := max(1024, len(meta.Tensors().Items())*32)
 
-	sched := C.ggml_backend_sched_new_ext(
+	// upstream vanilla ggml has no sched_new_ext; sched_new allocates its
+	// buffers lazily at reserve time instead of taking an alloc-buffers flag
+	sched := C.ggml_backend_sched_new(
 		(*C.ggml_backend_t)(unsafe.Pointer(&schedBackends[0])),
 		(*C.ggml_backend_buffer_type_t)(unsafe.Pointer(&schedBufts[0])),
 		C.int(len(schedBackends)),
 		C.size_t(maxGraphNodes),
 		C._Bool(false),
 		C._Bool(true),
-		C._Bool(params.AllocMemory),
 	)
 
 	// allocate buffers for each context
@@ -625,17 +628,8 @@ func (b *Backend) Load(ctx context.Context, progress func(float32)) error {
 		})
 	}
 
-	// Cleanup any backend state from devices that we didn't end up using
-nextDevice:
-	for _, d := range append(gpus, append(accels, cpus...)...) {
-		for _, backend := range b.schedBackends {
-			if d == C.ggml_backend_get_device(backend) {
-				continue nextDevice
-			}
-		}
-
-		C.ggml_backend_dev_reset(d)
-	}
+	// NOTE: upstream vanilla ggml has no ggml_backend_dev_reset; idle backend
+	// devices are simply left initialized, matching upstream behavior
 
 	if err := g.Wait(); err != nil {
 		return err
@@ -715,16 +709,15 @@ func (b *Backend) BackendDevices() []ml.DeviceInfo {
 		C.ggml_backend_dev_get_props(dev, &props)
 		info.Name = C.GoString(props.name)
 		info.Description = C.GoString(props.description)
-		info.ID = C.GoString(props.id)
-		info.Library = C.GoString(props.library)
-		info.ComputeMajor = (int)(props.compute_major)
-		info.ComputeMinor = (int)(props.compute_minor)
-		info.DriverMajor = (int)(props.driver_major)
-		info.DriverMinor = (int)(props.driver_minor)
-		info.Integrated = props.integrated != 0
-		if props.library != nil {
-			info.Library = C.GoString(props.library)
+		// upstream vanilla ggml dropped the fork's id/library/version fields
+		// from dev_props; identify the device by PCI id and its registry name
+		info.ID = C.GoString(props.device_id)
+		if reg := C.ggml_backend_dev_backend_reg(dev); reg != nil {
+			info.Library = C.GoString(C.ggml_backend_reg_name(reg))
 		}
+		// driver/compute versions are no longer reported by vanilla ggml; left
+		// at zero rather than guessed
+		info.Integrated = C.ggml_backend_dev_type(dev) == C.GGML_BACKEND_DEVICE_TYPE_IGPU
 		if props.device_id != nil {
 			info.PCIID = C.GoString(props.device_id)
 		}
@@ -818,9 +811,8 @@ func (c *Context) ComputeWithNotify(cb func(), tensors ...ml.Tensor) {
 		go cb()
 	}
 
-	if c.batchSize > 0 {
-		C.ggml_backend_sched_set_batch_size(c.b.sched, C.int(c.batchSize))
-	}
+	// NOTE: vanilla ggml has no sched batch-size hint; c.batchSize is stored
+	// for future use only
 
 	if status := C.ggml_backend_sched_graph_compute_async(c.b.sched, c.graph); status != C.GGML_STATUS_SUCCESS {
 		panic(fmt.Errorf("error computing ggml graph: %v", status))
@@ -843,10 +835,6 @@ func (c *Context) ComputeWithNotify(cb func(), tensors ...ml.Tensor) {
 }
 
 func (c *Context) Reserve() {
-	if c.batchSize > 0 {
-		C.ggml_backend_sched_set_batch_size(c.b.sched, C.int(c.batchSize))
-	}
-
 	reserved := C.ggml_backend_sched_reserve(c.b.sched, c.graph)
 
 	slog.Debug("compute graph", "nodes", C.ggml_graph_n_nodes(c.graph), "splits", C.ggml_backend_sched_get_n_splits(c.b.sched))
@@ -857,7 +845,7 @@ func (c *Context) Reserve() {
 	}
 
 	for i := range c.b.schedBackends {
-		bufferSize := C.ggml_backend_sched_get_attempted_buffer_size(c.b.sched, c.b.schedBackends[i])
+		bufferSize := C.ggml_backend_sched_get_buffer_size(c.b.sched, c.b.schedBackends[i])
 		c.b.btDeviceMemory[c.b.schedBufts[i]].Graph += uint64(bufferSize)
 
 		logutil.Trace("compute graph", "backend", C.GoString(C.ggml_backend_name(c.b.schedBackends[i])),

@@ -1,5 +1,6 @@
 /* Do not change, this code is generated from Golang structs */
 
+
 export class ChatInfo {
     id: string;
     title: string;
@@ -43,6 +44,7 @@ export class ChatsResponse {
 	}
 }
 export class Time {
+
 
     constructor(source: any = {}) {
         if ('string' === typeof source) source = JSON.parse(source);
