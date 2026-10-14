@@ -194,7 +194,17 @@ func main() {
 		// Use a fixed port in dev mode for predictable API access
 		ln, err = net.Listen("tcp", "127.0.0.1:3001")
 	} else {
-		ln, err = net.Listen("tcp", "127.0.0.1:0")
+		// Bind to a stable local port so the webview origin — and with it
+		// localStorage, where the selected theme and font are persisted —
+		// stays identical across app launches. A random OS-assigned port
+		// would change the origin on every launch, silently isolating
+		// localStorage and dropping the user's theme/font choice.
+		// Fall back to a random port only if the preferred one is in use.
+		ln, err = net.Listen("tcp", "127.0.0.1:52342")
+		if err != nil {
+			slog.Warn("preferred UI port unavailable, falling back to a random port", "port", 52342, "error", err)
+			ln, err = net.Listen("tcp", "127.0.0.1:0")
+		}
 	}
 	if err != nil {
 		slog.Error("failed to find available port", "error", err)
