@@ -13,9 +13,26 @@ import (
 	"github.com/topseeder1/allpaca/logutil"
 )
 
+// Option configures a BytePairEncoding created via NewBytePairEncodingWithOptions.
+type Option func(*BytePairEncoding)
+
+// WithSentencePieceNormalizer enables SentencePiece-style text handling:
+// spaces are normalized to the ▁ (U+2581) word-boundary marker that
+// SentencePiece vocabs use, and the GPT-2 byte-level remap is skipped during
+// encoding and decoding. Qwen 3.5 / 3.6 / 3.8 GGUF files declare
+// tokenizer.ggml.model = gpt2 but were converted from a SentencePiece vocab,
+// so they require this mode.
+func WithSentencePieceNormalizer() Option {
+	return func(bpe *BytePairEncoding) {
+		bpe.sentencePiece = true
+	}
+}
+
 type BytePairEncoding struct {
 	vocab   *Vocabulary
 	regexps []*regexp2.Regexp
+
+	sentencePiece bool
 }
 
 var _ Tokenizer = (*BytePairEncoding)(nil)
@@ -37,6 +54,29 @@ func NewBytePairEncoding(vocab *Vocabulary, pretokenizer ...string) BytePairEnco
 			}
 		}),
 	}
+}
+
+// NewBytePairEncodingWithOptions behaves like NewBytePairEncoding but takes
+// the pretokenizer patterns as an explicit slice (no default is applied — an
+// empty slice means "no pre-tokenizer", matching upstream qwen3next's use)
+// and accepts functional options.
+func NewBytePairEncodingWithOptions(vocab *Vocabulary, pretokenizer []string, opts ...Option) BytePairEncoding {
+	bpe := BytePairEncoding{
+		vocab: vocab,
+		regexps: slices.Collect(func(yield func(*regexp2.Regexp) bool) {
+			for _, p := range pretokenizer {
+				if !yield(regexp2.MustCompile(p, regexp2.RE2)) {
+					return
+				}
+			}
+		}),
+	}
+
+	for _, opt := range opts {
+		opt(&bpe)
+	}
+
+	return bpe
 }
 
 func (bpe BytePairEncoding) Vocabulary() *Vocabulary {
@@ -137,18 +177,24 @@ func (bpe BytePairEncoding) Encode(s string, addSpecial bool) ([]int32, error) {
 		for split := range bpe.split(frag.value) {
 			// TODO: process splits concurrently
 			var sb strings.Builder
-			for _, b := range []byte(split) {
-				r := rune(b)
-				switch {
-				case r == 0x00ad:
-					r = 0x0143
-				case r <= 0x0020:
-					r = r + 0x0100
-				case r >= 0x007f && r <= 0x00a0:
-					r = r + 0x00a2
-				}
+			if bpe.sentencePiece {
+				// SentencePiece vocabs store raw UTF-8 with ▁ (U+2581) standing
+				// in for spaces; the GPT-2 byte→codepoint remap is not applied.
+				sb.WriteString(strings.ReplaceAll(split, " ", "\u2581"))
+			} else {
+				for _, b := range []byte(split) {
+					r := rune(b)
+					switch {
+					case r == 0x00ad:
+						r = 0x0143
+					case r <= 0x0020:
+						r = r + 0x0100
+					case r >= 0x007f && r <= 0x00a0:
+						r = r + 0x00a2
+					}
 
-				sb.WriteRune(r)
+					sb.WriteRune(r)
+				}
 			}
 
 			// short circuit if the fragment is in the vocabulary
@@ -257,6 +303,16 @@ func (bpe BytePairEncoding) Decode(ids []int32) (string, error) {
 	var sb strings.Builder
 	for _, id := range ids {
 		for _, r := range bpe.vocab.Decode(id) {
+			if bpe.sentencePiece {
+				// SentencePiece vocabs contain raw UTF-8; ▁ (U+2581) maps
+				// back to a normal space.
+				if r == 0x2581 {
+					r = ' '
+				}
+				sb.WriteRune(r)
+				continue
+			}
+
 			switch {
 			case r == 0x0100:
 				// this produces 0x00 aka NULL

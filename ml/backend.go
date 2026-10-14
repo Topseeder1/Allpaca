@@ -138,6 +138,12 @@ type Tensor interface {
 	Bytes() []byte
 	Floats() []float32
 
+	// BackendGet reads the tensor's data from the backend storage as float32
+	// values. Unlike Floats, it does not require a prior Compute — it is
+	// intended for reading constant tensors (weights, scalars, packed clamp
+	// bounds) that have already been loaded into a backend buffer.
+	BackendGet() []float32
+
 	FromBytes([]byte)
 	FromFloats([]float32)
 	FromInts([]int32)
@@ -186,6 +192,10 @@ type Tensor interface {
 	Contiguous(ctx Context, shape ...int) Tensor
 
 	Pad(ctx Context, shape ...int) Tensor
+
+	// PadExt pads the tensor on each side of each of its four dimensions.
+	// lpN/rpN are the left and right pad amounts for dimension N.
+	PadExt(ctx Context, lp0, rp0, lp1, rp1, lp2, rp2, lp3, rp3 int) Tensor
 
 	Stack(ctx Context, dim int, s ...Tensor) Tensor
 

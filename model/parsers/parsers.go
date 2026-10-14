@@ -10,11 +10,7 @@ import (
 )
 
 type Parser interface {
-	// Init initializes the parser with tools, optional last message for chat prefill, and think value
-	// Returns processed tools if the parser needs to modify them (e.g., harmony renames them)
 	Init(tools []api.Tool, lastMessage *api.Message, thinkValue *api.ThinkValue) []api.Tool
-	// Add processes streamed content and returns parsed content, thinking, and tool calls
-	// The done flag indicates if this is the last chunk (used for draining accumulators)
 	Add(s string, done bool) (content string, thinking string, calls []api.ToolCall, err error)
 	HasToolSupport() bool
 	HasThinkingSupport() bool
@@ -77,6 +73,11 @@ func ParserForName(name string) Parser {
 		return &LFM2Parser{hasThinkingSupport: false}
 	case "lfm2-thinking":
 		return &LFM2Parser{hasThinkingSupport: true}
+	case "gemma4":
+		p = &Gemma4Parser{hasThinkingSupport: true}
+	// Qwen3.5 family — same aliasing as the renderer.
+	case "qwen35", "qwen35moe", "qwen3.5", "qwen3.6", "qwen3.8", "qwen36":
+		p = &Qwen35Parser{}
 	default:
 		return nil
 	}
@@ -86,7 +87,7 @@ func ParserForName(name string) Parser {
 type PassthroughParser struct{}
 
 func (p *PassthroughParser) Init(tools []api.Tool, lastMessage *api.Message, thinkValue *api.ThinkValue) []api.Tool {
-	return tools // passthrough doesn't modify tools
+	return tools
 }
 
 func (p *PassthroughParser) Add(s string, done bool) (content string, thinking string, calls []api.ToolCall, err error) {
@@ -115,10 +116,9 @@ func splitAtTag(sb *strings.Builder, tag string, trimAfter bool) (string, string
 	}
 	sb.Reset()
 	sb.WriteString(after)
-	return before, after // return events
+	return before, after
 }
 
-// overlap returns the longest overlap between the suffix of s and the prefix of delim
 func overlap(s, delim string) int {
 	max := min(len(delim), len(s))
 	for i := max; i > 0; i-- {
@@ -129,13 +129,11 @@ func overlap(s, delim string) int {
 	return 0
 }
 
-// trailingWhitespaceLen returns the length in bytes of trailing whitespace in s
 func trailingWhitespaceLen(s string) int {
 	remaining := s
 	total := 0
 	for len(remaining) > 0 {
 		r, size := utf8.DecodeLastRuneInString(remaining)
-		// if it's an invalid utf8 rune, assume it isn't whitespace
 		if r == utf8.RuneError && size == 1 {
 			break
 		}

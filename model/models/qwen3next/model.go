@@ -41,6 +41,7 @@ type Options struct {
 	ssmNGroup      int // num_k_heads
 	ssmDtRank      int // num_v_heads
 	convKernelSize int // SSM conv kernel size
+	vHeadReordered bool // qwen35/qwen35moe use a different v-head ordering
 
 	// Per-layer type from GGUF metadata
 	isRecurrent []bool
@@ -283,7 +284,18 @@ func New(c fs.Config) (model.Model, error) {
 		}
 	}
 	if !hasZero || !hasFull {
-		return nil, fmt.Errorf("qwen3next: invalid attention.head_count_kv array; expected mix of zero and non-zero values")
+		// Qwen3.5+ GGUF files declare a scalar attention.head_count_kv and a
+		// full_attention_interval in place of a per-layer KV heads array.
+		// When the array-based check cannot decide the layout, derive the
+		// recurrent/full interleave from full_attention_interval: full
+		// attention every Nth layer, recurrent on the rest.
+		interval := int(c.Uint("full_attention_interval"))
+		if interval <= 0 || interval > numLayers {
+			return nil, fmt.Errorf("qwen3next: invalid attention.head_count_kv array; expected mix of zero and non-zero values")
+		}
+		for i := range numLayers {
+			isRecurrent[i] = (i+1)%interval != 0
+		}
 	}
 
 	// Determine if MoE
@@ -331,6 +343,7 @@ func New(c fs.Config) (model.Model, error) {
 		ssmNGroup:             int(c.Uint("ssm.group_count")),
 		ssmDtRank:             int(c.Uint("ssm.time_step_rank")),
 		convKernelSize:        int(c.Uint("ssm.conv_kernel")),
+				vHeadReordered: c.Bool("ssm.v_head_reordered", c.String("general.architecture") == "qwen35" || c.String("general.architecture") == "qwen35moe"),
 		isRecurrent:           isRecurrent,
 	}
 	if opts.numKVHeads == 0 {

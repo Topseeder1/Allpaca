@@ -37,6 +37,49 @@ import (
 	"github.com/topseeder1/allpaca/tokenizer"
 )
 
+// gpuBackendLibSubdirs names the subdirectories under the main ollama library
+// directory that hold GPU-specific backend DLLs. On Windows the loader does
+// not recurse into subdirectories when resolving library search paths, so
+// each backend directory must be listed explicitly. Relying solely on
+// ml.LibraryPaths(gpus) creates a self-reinforcing cold-start failure: if
+// discovery returns zero GPUs (which happens when no GPU backend DLL has
+// been loaded yet), the CUDA/ROCm/Vulkan subdirectories are never added to
+// the child process's search path, so the child also finds zero GPUs. This
+// fixed list of known backend subdirectory names breaks the cycle by adding
+// any of them that exist on disk, independent of discovery's opinion.
+var gpuBackendLibSubdirs = []string{
+	"cuda_v13",
+	"cuda_v12",
+	"cuda_v11",
+	"rocm",
+	"vulkan",
+}
+
+// appendGPUBackendLibDirs returns libDirs with any GPU-backend subdirectory
+// of an existing entry appended, provided that subdirectory exists on disk.
+// The input slice is not modified.
+func appendGPUBackendLibDirs(libDirs []string) []string {
+	seen := make(map[string]struct{}, len(libDirs))
+	for _, d := range libDirs {
+		seen[d] = struct{}{}
+	}
+
+	out := append([]string{}, libDirs...)
+	for _, base := range libDirs {
+		for _, sub := range gpuBackendLibSubdirs {
+			dir := filepath.Join(base, sub)
+			if _, ok := seen[dir]; ok {
+				continue
+			}
+			if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+				out = append(out, dir)
+				seen[dir] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
 type filteredEnv []string
 
 func (e filteredEnv) LogValue() slog.Value {
@@ -146,7 +189,13 @@ func NewLlamaServer(systemInfo ml.SystemInfo, gpus []ml.DeviceInfo, modelPath st
 	var tok tokenizer.Tokenizer
 	var err error
 	if envconfig.NewEngine() || f.KV().OllamaEngineRequired() {
-		if len(projectors) == 0 {
+		// The Go engine has a native text+vision implementation for gemma4,
+		// so it can accept split-vision manifests (main model + separate
+		// projector blob), unlike every other architecture the Go engine
+		// knows which is text-only. Refusing gemma4 here would fall back to
+		// the C++ engine, which has no gemma4 architecture support at all.
+		arch := f.KV().Architecture()
+		if len(projectors) == 0 || arch == "gemma4" || arch == "qwen35" || arch == "qwen35moe" {
 			tok, err = model.NewTextProcessor(modelPath)
 		} else {
 			err = errors.New("split vision models aren't supported")
@@ -259,7 +308,14 @@ func NewLlamaServer(systemInfo ml.SystemInfo, gpus []ml.DeviceInfo, modelPath st
 		}
 	}
 
-	gpuLibs := ml.LibraryPaths(gpus)
+	// ml.LibraryPaths(gpus) returns the base lib directory plus per-backend
+	// subdirectories only when GPUs were actually detected. That makes GPU
+	// discovery a chicken-and-egg problem: no GPU DLL means no GPU detected
+	// means no GPU DLL on the search path. appendGPUBackendLibDirs adds any
+	// known GPU-backend subdirectory that exists on disk, regardless of
+	// discovery, so the runner can bootstrap itself out of the cold state.
+	gpuLibs := appendGPUBackendLibDirs(ml.LibraryPaths(gpus))
+	slog.Debug("runner gpu library paths", "paths", gpuLibs)
 	status := NewStatusWriter(os.Stderr)
 	cmd, port, err := StartRunner(
 		tok != nil,
@@ -1429,18 +1485,18 @@ object ::=
   "{" ws (
          string ":" ws value
     ("," ws string ":" ws value)*
-  )? ws "}" 
+  )? ws "}"
 array  ::=
   "[" ws (
             value
     ("," ws value)*
-  )? ws "]" 
+  )? ws "]"
 string ::=
   "\"" (
     [^"\\\x7F\x00-\x1F] |
     "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]) # escapes
-  )* "\"" 
-number ::= ("-"? ([0-9] | [1-9] [0-9]*)) ("." [0-9]+)? ([eE] [-+]? [0-9]+)? 
+  )* "\""
+number ::= ("-"? ([0-9] | [1-9] [0-9]*)) ("." [0-9]+)? ([eE] [-+]? [0-9]+)?
 # Optional space: by convention, applied in this grammar after literal chars when allowed
 ws ::= ([ \t\n] ws)?
 `

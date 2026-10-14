@@ -1057,6 +1057,26 @@ func (t *Tensor) Floats() (data []float32) {
 	return
 }
 
+// BackendGet reads the tensor's data directly from the backend storage as
+// float32 values. Unlike Floats, it does not require a prior Compute — it is
+// intended for reading constant tensors (weights, scalars, packed clamp
+// bounds) that have already been loaded into a backend buffer. If the tensor
+// has a pending compute the sync is performed first.
+func (t *Tensor) BackendGet() []float32 {
+	n := int(C.ggml_nelements(t.t))
+	if n == 0 {
+		return nil
+	}
+
+	if t.sync != nil {
+		t.sync()
+	}
+
+	data := make([]float32, n)
+	C.ggml_backend_tensor_get(t.t, unsafe.Pointer(&data[0]), 0, C.ggml_nbytes(t.t))
+	return data
+}
+
 func tensorSet[S ~[]E, E byte | float32 | int32](t *Tensor, s S) {
 	if len(s) == 0 {
 		return
@@ -1298,6 +1318,23 @@ func (t *Tensor) Pad(ctx ml.Context, shape ...int) ml.Tensor {
 	return &Tensor{
 		b: t.b,
 		t: C.ggml_pad(ctx.(*Context).ctx, t.t, C.int(shape[0]), C.int(shape[1]), C.int(shape[2]), C.int(shape[3])),
+	}
+}
+
+// PadExt pads the tensor on each side of each of its four dimensions.
+// lpN/rpN are the left and right pad amounts for dimension N, matching
+// ggml_pad_ext's argument order.
+func (t *Tensor) PadExt(ctx ml.Context, lp0, rp0, lp1, rp1, lp2, rp2, lp3, rp3 int) ml.Tensor {
+	return &Tensor{
+		b: t.b,
+		t: C.ggml_pad_ext(
+			ctx.(*Context).ctx,
+			t.t,
+			C.int(lp0), C.int(rp0),
+			C.int(lp1), C.int(rp1),
+			C.int(lp2), C.int(rp2),
+			C.int(lp3), C.int(rp3),
+		),
 	}
 }
 

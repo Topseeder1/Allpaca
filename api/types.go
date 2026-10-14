@@ -436,6 +436,10 @@ type ToolProperty struct {
 	Description string             `json:"description,omitempty"`
 	Enum        []any              `json:"enum,omitempty"`
 	Properties  *ToolPropertiesMap `json:"properties,omitempty"`
+	// Required lists the property names required by this (possibly nested)
+	// object schema. Added by upstream alongside gemma4 support for nested
+	// object tool schemas; additive and safe for existing callers.
+	Required []string `json:"required,omitempty"`
 }
 
 // ToTypeScriptType converts a ToolProperty to a TypeScript type string

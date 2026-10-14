@@ -48,34 +48,23 @@ func rendererForName(name string) Renderer {
 	}
 	switch name {
 	case "qwen3-coder":
-		renderer := &Qwen3CoderRenderer{}
-		return renderer
+		return &Qwen3CoderRenderer{}
 	case "qwen3-vl-instruct":
-		renderer := &Qwen3VLRenderer{isThinking: false, useImgTags: RenderImgTags}
-		return renderer
+		return &Qwen3VLRenderer{isThinking: false, useImgTags: RenderImgTags}
 	case "qwen3-vl-thinking":
-		renderer := &Qwen3VLRenderer{isThinking: true, useImgTags: RenderImgTags}
-		return renderer
+		return &Qwen3VLRenderer{isThinking: true, useImgTags: RenderImgTags}
 	case "cogito":
-		renderer := &CogitoRenderer{isThinking: true}
-		return renderer
+		return &CogitoRenderer{isThinking: true}
 	case "deepseek3.1":
-		renderer := &DeepSeek3Renderer{IsThinking: true, Variant: Deepseek31}
-		return renderer
+		return &DeepSeek3Renderer{IsThinking: true, Variant: Deepseek31}
 	case "olmo3":
-		renderer := &Olmo3Renderer{UseExtendedSystemMessage: false}
-		return renderer
+		return &Olmo3Renderer{UseExtendedSystemMessage: false}
 	case "olmo3.1":
-		renderer := &Olmo3Renderer{UseExtendedSystemMessage: true}
-		return renderer
+		return &Olmo3Renderer{UseExtendedSystemMessage: true}
 	case "olmo3-think":
-		// Used for Olmo-3-7B-Think and Olmo-3.1-32B-Think (same template)
-		renderer := &Olmo3ThinkRenderer{Variant: Olmo31Think}
-		return renderer
+		return &Olmo3ThinkRenderer{Variant: Olmo31Think}
 	case "olmo3-32b-think":
-		// Used for Olmo-3-32B-Think
-		renderer := &Olmo3ThinkRenderer{Variant: Olmo3Think32B}
-		return renderer
+		return &Olmo3ThinkRenderer{Variant: Olmo3Think32B}
 	case "nemotron-3-nano":
 		return &Nemotron3NanoRenderer{}
 	case "functiongemma":
@@ -88,6 +77,25 @@ func rendererForName(name string) Renderer {
 		return &LFM2Renderer{IsThinking: false}
 	case "lfm2-thinking":
 		return &LFM2Renderer{IsThinking: true}
+	case "gemma4":
+		return &Gemma4Renderer{}
+	// Qwen 3.5 family. Upstream names qwen3.5 and qwen3.8 renderers in the
+	// model manifest as the dotted family names. The GGUF architecture
+	// (general.architecture = "qwen35" / "qwen35moe") and the model-family
+	// marketing names ("qwen3.6", "qwen36") are added as aliases so the
+	// resolver works regardless of which name the manifest carries.
+	// The default qwen3.5 constructor enables thinking and always emits an
+	// empty thinking block on no-think turns so the chat template stays
+	// structurally consistent — a zero-value renderer produces a template
+	// the model has never seen and yields garbage output on first token.
+	case "qwen3.5", "tev1", "qwen35", "qwen35moe", "qwen3.6", "qwen36":
+		return &Qwen35Renderer{
+			isThinking:              true,
+			emitEmptyThinkOnNoThink: true,
+			useImgTags:              RenderImgTags,
+		}
+	case "qwen3.8":
+		return newQwen38Renderer()
 	default:
 		return nil
 	}

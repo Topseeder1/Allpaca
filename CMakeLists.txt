@@ -82,23 +82,29 @@ set(GGML_CPU ON)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src)
 set_property(TARGET ggml PROPERTY EXCLUDE_FROM_ALL TRUE)
 
-# The refreshed upstream ggml no longer creates a "ggml-cpu" aggregate target
-# when GGML_CPU_ALL_VARIANTS is on. It registers every CPU variant backend
-# (ggml-cpu-x64, ggml-cpu-sse42, ...) in the GGML_AVAILABLE_BACKENDS cache list
-# and attaches them to the "ggml" registry target instead. Collect the
-# variants from that list and rebuild the aggregate under the old name so the
-# install component and `cmake --build --target ggml-cpu` keep working.
+# The engine's own ml/backend/ggml/ggml/src/CMakeLists.txt creates the
+# "ggml-cpu" aggregate target when GGML_CPU_ALL_VARIANTS is on. Recreating it
+# here trips a CMP0002 "target already exists" error, so guard the creation.
+# We still want this aggregate to depend on every variant we detect — if the
+# engine already made it, add_dependencies just extends it.
+#
+# GGML_AVAILABLE_BACKENDS is a CMake cache variable that can retain stale
+# entries (e.g. a variant that no longer exists this run). Filter to targets
+# that actually exist in this configure so install(TARGETS ...) doesn't try
+# to install ghosts.
 set(CPU_VARIANTS "")
 if(GGML_CPU_ALL_VARIANTS)
     foreach(_backend ${GGML_AVAILABLE_BACKENDS})
-        if(_backend MATCHES "^ggml-cpu")
+        if(_backend MATCHES "^ggml-cpu" AND TARGET ${_backend})
             list(APPEND CPU_VARIANTS ${_backend})
         endif()
     endforeach()
-    if(CPU_VARIANTS)
+endif()
+if(CPU_VARIANTS)
+    if(NOT TARGET ggml-cpu)
         add_custom_target(ggml-cpu)
-        add_dependencies(ggml-cpu ${CPU_VARIANTS})
     endif()
+    add_dependencies(ggml-cpu ${CPU_VARIANTS})
 endif()
 if(NOT CPU_VARIANTS)
     set(CPU_VARIANTS "ggml-cpu")
