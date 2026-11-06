@@ -1671,6 +1671,14 @@ static std::set<llm_tensor> llm_get_tensor_names(llm_arch arch) {
                 // MoE shared expert layer
                 LLM_TENSOR_FFN_DOWN_SHEXP,
                 LLM_TENSOR_FFN_UP_SHEXP,
+                // Nemotron 3.5 revision: draft/nextn layer weights + post-attn norm
+                LLM_TENSOR_ATTN_POST_NORM,
+                LLM_TENSOR_NEXTN_EH_PROJ,
+                LLM_TENSOR_NEXTN_EMBED_TOKENS,
+                LLM_TENSOR_NEXTN_ENORM,
+                LLM_TENSOR_NEXTN_HNORM,
+                LLM_TENSOR_NEXTN_SHARED_HEAD_HEAD,
+                LLM_TENSOR_NEXTN_SHARED_HEAD_NORM,
             };
         case LLM_ARCH_EXAONE4:
             return {

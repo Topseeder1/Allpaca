@@ -5,28 +5,49 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getChat } from "@/api";
 import { Link } from "@/components/ui/link";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { ChatsResponse } from "@/gotypes";
-import { CogIcon } from "@heroicons/react/24/outline";
+import { CogIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
+import { UndoToast } from "@/components/UndoToast";
+import { ChatActionsMenu } from "@/components/ChatActionsMenu";
 
 // there's a hidden debug feature to copy a chat's data to the clipboard by
 // holding shift and clicking this many times within this many seconds
 const DEBUG_SHIFT_CLICKS_REQUIRED = 5;
 const DEBUG_SHIFT_CLICK_WINDOW_MS = 7000; // 7 seconds
 
+const ACTION_MENU_WIDTH = 160;
+const ACTION_MENU_HEIGHT = 84; // two items + container padding, used for flip/clamp
+const ACTION_MENU_MARGIN = 8;
+
 interface ChatSidebarProps {
   currentChatId?: string;
+}
+
+interface ActionMenuState {
+  chatId: string;
+  title: string;
+  top: number;
+  left: number;
 }
 
 export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   const { data, isLoading, error } = useChats();
   const queryClient = useQueryClient();
   const renameMutation = useRenameChat();
-  const deleteMutation = useDeleteChat();
+  const {
+    schedule: scheduleDelete,
+    undo: undoDelete,
+    pending: pendingDeletes,
+  } = useDeleteChat();
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [shiftClicks, setShiftClicks] = useState<Record<string, number[]>>({});
   const [copiedChatId, setCopiedChatId] = useState<string | null>(null);
+  const [actionMenu, setActionMenu] = useState<ActionMenuState | null>(null);
+
+  const closeActionMenu = useCallback(() => setActionMenu(null), []);
 
   const handleMouseEnter = useCallback(
     (chatId: string) => {
@@ -164,20 +185,11 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   }, [groupedChats]);
 
   const handleDeleteChat = useCallback(
-    async (chatId: string) => {
-      const confirmed = window.confirm(
-        `Are you sure you want to remove this chat?`,
-      );
-
-      if (!confirmed) return;
-
-      try {
-        await deleteMutation.mutateAsync(chatId);
-      } catch (error) {
-        console.error("Failed to delete chat:", error);
-      }
+    (chatId: string, chatTitle: string) => {
+      // Deferred delete with an undo window — no blocking confirm dialog.
+      scheduleDelete(chatId, chatTitle);
     },
-    [deleteMutation],
+    [scheduleDelete],
   );
 
   // implementation of the hidden debug feature to copy a chat's data to the clipboard
@@ -223,6 +235,10 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     [shiftClicks],
   );
 
+  // Right-click keeps using the native shell menu. `window.menu` only stages
+  // items for the shell's `ContextMenuRequested` handler, which fires on a
+  // trusted right-click, so this path is correct for contextmenu and only for
+  // contextmenu.
   const handleContextMenu = useCallback(
     async (_: React.MouseEvent, chatId: string, chatTitle: string) => {
       const selectedAction = await window.menu([
@@ -233,10 +249,37 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
       if (selectedAction === "Rename") {
         startEditing(chatId, chatTitle);
       } else if (selectedAction === "Delete") {
-        handleDeleteChat(chatId);
+        handleDeleteChat(chatId, chatTitle);
       }
     },
     [startEditing, handleDeleteChat],
+  );
+
+  // The `⋯` button is a left-click, which never reaches the shell's native
+  // context-menu handler. Render our own menu for it instead of trying to
+  // synthesize a contextmenu event (untrusted events do not open the native
+  // menu). Position is viewport-clamped and flips above the button when there
+  // is no room below.
+  const openActionMenu = useCallback(
+    (chatId: string, title: string, anchor: HTMLElement) => {
+      const rect = anchor.getBoundingClientRect();
+
+      let top = rect.bottom + 4;
+      if (top + ACTION_MENU_HEIGHT > window.innerHeight - ACTION_MENU_MARGIN) {
+        top = rect.top - ACTION_MENU_HEIGHT - 4;
+      }
+
+      let left = rect.right - ACTION_MENU_WIDTH;
+      if (left < ACTION_MENU_MARGIN) {
+        left = ACTION_MENU_MARGIN;
+      }
+      if (left + ACTION_MENU_WIDTH > window.innerWidth - ACTION_MENU_MARGIN) {
+        left = window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_MARGIN;
+      }
+
+      setActionMenu({ chatId, title, top, left });
+    },
+    [],
   );
 
   if (isLoading) {
@@ -304,7 +347,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
               {group.chats.map((chat) => (
                 <div
                   key={chat.id}
-                  className={`allow-context-menu flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
+                  className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
                     chat.id === currentChatId
                       ? "bg-surface-hover text-fg"
                       : ""
@@ -369,12 +412,73 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
                       )}
                     </Link>
                   )}
+                  {editingChatId !== chat.id && (
+                    <button
+                      type="button"
+                      aria-label="Chat actions"
+                      aria-haspopup="menu"
+                      aria-expanded={actionMenu?.chatId === chat.id}
+                      title="Chat actions"
+                      data-chat-menu-trigger
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (actionMenu?.chatId === chat.id) {
+                          setActionMenu(null);
+                          return;
+                        }
+                        openActionMenu(
+                          chat.id,
+                          chat.title ||
+                            chat.userExcerpt ||
+                            chat.createdAt.toLocaleString(),
+                          e.currentTarget,
+                        );
+                      }}
+                      className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
+                        chat.id === currentChatId ||
+                        actionMenu?.chatId === chat.id
+                          ? "opacity-100"
+                          : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+                      }`}
+                    >
+                      <EllipsisHorizontalIcon className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
           ))}
         </div>
       </div>
+      {pendingDeletes.length > 0 && (
+        <div className="pointer-events-none fixed bottom-4 left-1/2 z-50 flex w-full max-w-md -translate-x-1/2 flex-col items-center gap-2 px-4">
+          {pendingDeletes.map((item) => (
+            <UndoToast
+              key={item.chatId}
+              message={`Conversation deleted`}
+              onUndo={() => undoDelete(item.chatId)}
+            />
+          ))}
+        </div>
+      )}
+      {actionMenu &&
+        createPortal(
+          <ChatActionsMenu
+            top={actionMenu.top}
+            left={actionMenu.left}
+            onRename={() => {
+              startEditing(actionMenu.chatId, actionMenu.title);
+              setActionMenu(null);
+            }}
+            onDelete={() => {
+              handleDeleteChat(actionMenu.chatId, actionMenu.title);
+              setActionMenu(null);
+            }}
+            onClose={closeActionMenu}
+          />,
+          document.body,
+        )}
     </nav>
   );
 }
