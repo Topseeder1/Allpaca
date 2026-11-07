@@ -27,34 +27,28 @@ declare module "@/gotypes" {
 Model.prototype.isCloud = function (): boolean {
   return this.model.endsWith("cloud");
 };
-// Helper function to convert Uint8Array to base64
-function uint8ArrayToBase64(uint8Array: Uint8Array): string {
-  const chunkSize = 0x8000; // 32KB chunks to avoid stack overflow
-  let binary = "";
 
+function uint8ArrayToBase64(uint8Array: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = "";
   for (let i = 0; i < uint8Array.length; i += chunkSize) {
     const chunk = uint8Array.subarray(i, i + chunkSize);
     binary += String.fromCharCode(...chunk);
   }
-
   return btoa(binary);
 }
 
 export async function fetchUser(): Promise<User | null> {
   const response = await fetch(`${API_BASE}/api/me`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
 
   if (response.ok) {
     const userData: User = await response.json();
-
     if (userData.avatarurl && !userData.avatarurl.startsWith("http")) {
       userData.avatarurl = `${OLLAMA_DOT_COM}${userData.avatarurl}`;
     }
-
     return userData;
   }
 
@@ -68,9 +62,7 @@ export async function fetchUser(): Promise<User | null> {
 export async function fetchConnectUrl(): Promise<string> {
   const response = await fetch(`${API_BASE}/api/me`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
 
   if (response.status === 401) {
@@ -86,9 +78,7 @@ export async function fetchConnectUrl(): Promise<string> {
 export async function disconnectUser(): Promise<void> {
   const response = await fetch(`${API_BASE}/api/signout`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   });
 
   if (!response.ok) {
@@ -98,6 +88,22 @@ export async function disconnectUser(): Promise<void> {
 
 export async function getChats(): Promise<ChatsResponse> {
   const response = await fetch(`${API_BASE}/api/v1/chats`);
+  const data = await response.json();
+  return new ChatsResponse(data);
+}
+
+// getArchivedChats returns only chats with archivedAt set that are not
+// deleted. Sorted newest-archived-first by the server.
+export async function getArchivedChats(): Promise<ChatsResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/chats/archived`);
+  const data = await response.json();
+  return new ChatsResponse(data);
+}
+
+// getDeletedChats returns soft-deleted chats still within the 30-day grace
+// window. Once purged server-side or after 30 days, they disappear here.
+export async function getDeletedChats(): Promise<ChatsResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/chats/deleted`);
   const data = await response.json();
   return new ChatsResponse(data);
 }
@@ -115,26 +121,15 @@ export async function getModels(query?: string): Promise<Model[]> {
     let models: Model[] = modelsResponse
       .filter((m: ModelResponse) => {
         const families = m.details?.families;
-
-        if (!families || families.length === 0) {
-          return true;
-        }
-
+        if (!families || families.length === 0) return true;
         const isBertOnly = families.every((family: string) =>
           family.toLowerCase().includes("bert"),
         );
-
         return !isBertOnly;
       })
       .map((m: ModelResponse) => {
-        // Remove the latest tag from the returned model
         const modelName = m.name.replace(/:latest$/, "");
-
-        // Preserve the origin tag the server emits on /api/tags
-        // ("allpaca" | "ollama"). The ollama/browser ModelResponse
-        // type doesn't declare it yet, so cast through.
         const origin = (m as { origin?: string }).origin;
-
         return new Model({
           model: modelName,
           origin,
@@ -143,13 +138,11 @@ export async function getModels(query?: string): Promise<Model[]> {
         });
       });
 
-    // Filter by query if provided
     if (query) {
       const normalizedQuery = query.toLowerCase().trim();
-
-      const filteredModels = models.filter((m: Model) => {
-        return m.model.toLowerCase().startsWith(normalizedQuery);
-      });
+      const filteredModels = models.filter((m: Model) =>
+        m.model.toLowerCase().startsWith(normalizedQuery),
+      );
 
       let exactMatch = false;
       for (const m of filteredModels) {
@@ -159,7 +152,6 @@ export async function getModels(query?: string): Promise<Model[]> {
         }
       }
 
-      // Add query if it's in the registry and not already in the list
       if (!exactMatch) {
         const result = await getModelUpstreamInfo(new Model({ model: query }));
         const existsUpstream = !!result.digest && !result.error;
@@ -182,14 +174,12 @@ export async function getModelCapabilities(
 ): Promise<ModelCapabilitiesResponse> {
   try {
     const showResponse = await ollama.show({ model: modelName });
-
     return new ModelCapabilitiesResponse({
       capabilities: Array.isArray(showResponse.capabilities)
         ? showResponse.capabilities
         : [],
     });
   } catch (error) {
-    // Model might not be downloaded yet, return empty capabilities
     console.error(`Failed to get capabilities for ${modelName}:`, error);
     return new ModelCapabilitiesResponse({ capabilities: [] });
   }
@@ -209,22 +199,18 @@ export async function* sendMessage(
   forceUpdate?: boolean,
   think?: boolean | string,
 ): AsyncGenerator<ChatEventUnion> {
-  // Convert Uint8Array to base64 for JSON serialization
   const serializedAttachments = attachments?.map((att) => ({
     filename: att.filename,
     data: uint8ArrayToBase64(att.data),
   }));
 
-  // Send think parameter when it's explicitly set (true, false, or a non-empty string).
   const shouldSendThink =
     think !== undefined &&
     (typeof think === "boolean" || (typeof think === "string" && think !== ""));
 
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(
       new ChatRequest({
         model: model.model,
@@ -233,7 +219,6 @@ export async function* sendMessage(
         ...(serializedAttachments !== undefined
           ? { attachments: serializedAttachments }
           : {}),
-        // Always send web_search as a boolean value (default to false)
         web_search: webSearch ?? false,
         file_tools: fileTools ?? false,
         ...(forceUpdate !== undefined ? { forceUpdate } : {}),
@@ -258,17 +243,13 @@ export async function* sendMessage(
   }
 }
 
-export async function getSettings(): Promise<{
-  settings: Settings;
-}> {
+export async function getSettings(): Promise<{ settings: Settings }> {
   const response = await fetch(`${API_BASE}/api/v1/settings`);
   if (!response.ok) {
     throw new Error("Failed to fetch settings");
   }
   const data = await response.json();
-  return {
-    settings: new Settings(data.settings),
-  };
+  return { settings: new Settings(data.settings) };
 }
 
 export async function updateSettings(settings: Settings): Promise<{
@@ -276,9 +257,7 @@ export async function updateSettings(settings: Settings): Promise<{
 }> {
   const response = await fetch(`${API_BASE}/api/v1/settings`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
   if (!response.ok) {
@@ -286,17 +265,13 @@ export async function updateSettings(settings: Settings): Promise<{
     throw new Error(error || "Failed to update settings");
   }
   const data = await response.json();
-  return {
-    settings: new Settings(data.settings),
-  };
+  return { settings: new Settings(data.settings) };
 }
 
 export async function renameChat(chatId: string, title: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/rename`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title: title.trim() }),
   });
   if (!response.ok) {
@@ -305,6 +280,8 @@ export async function renameChat(chatId: string, title: string): Promise<void> {
   }
 }
 
+// deleteChat soft-deletes: the chat moves to Recently Deleted for 30 days.
+// No-op if the chat is already in the trash (server returns 200).
 export async function deleteChat(chatId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}`, {
     method: "DELETE",
@@ -315,19 +292,58 @@ export async function deleteChat(chatId: string): Promise<void> {
   }
 }
 
-// Get upstream information for model staleness checking
+// archiveChat hides the chat from the active list without touching its rows.
+export async function archiveChat(chatId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/archive`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "Failed to archive chat");
+  }
+}
+
+// unarchiveChat returns the chat to the active list.
+export async function unarchiveChat(chatId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/unarchive`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "Failed to unarchive chat");
+  }
+}
+
+// restoreChat brings a soft-deleted chat back. Preserves archived_at.
+export async function restoreChat(chatId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/restore`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "Failed to restore chat");
+  }
+}
+
+// purgeChat permanently removes a soft-deleted chat. Irreversible.
+export async function purgeChat(chatId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/purge`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "Failed to purge chat");
+  }
+}
+
 export async function getModelUpstreamInfo(
   model: Model,
 ): Promise<{ digest?: string; pushTime: number; error?: string }> {
   try {
     const response = await fetch(`${API_BASE}/api/v1/model/upstream`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: model.model,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: model.model }),
     });
 
     if (!response.ok) {
@@ -338,12 +354,10 @@ export async function getModelUpstreamInfo(
     }
 
     const data = await response.json();
-
     if (data.error) {
       console.warn(`Upstream digest check: ${data.error}`);
       return { error: data.error, pushTime: 0 };
     }
-
     return { digest: data.digest, pushTime: data.pushTime || 0 };
   } catch (error) {
     console.warn(`Error checking model staleness:`, error);
@@ -363,9 +377,7 @@ export async function* pullModel(
 }> {
   const response = await fetch(`${API_BASE}/api/v1/models/pull`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: modelName }),
     signal,
   });
@@ -392,7 +404,6 @@ export async function getInferenceCompute(): Promise<InferenceCompute[]> {
       `Failed to fetch inference compute: ${response.statusText}`,
     );
   }
-
   const data = await response.json();
   const inferenceComputeResponse = new InferenceComputeResponse(data);
   return inferenceComputeResponse.inferenceComputes || [];
@@ -400,20 +411,15 @@ export async function getInferenceCompute(): Promise<InferenceCompute[]> {
 
 export async function fetchHealth(): Promise<boolean> {
   try {
-    // Use the /api/version endpoint as a health check
     const response = await fetch(`${API_BASE}/api/version`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
     });
 
     if (response.ok) {
       const data = await response.json();
-      // If we get a version back, the server is healthy
       return !!data.version;
     }
-
     return false;
   } catch (error) {
     console.error("Error checking health:", error);

@@ -98,16 +98,27 @@ type ToolFunction struct {
 }
 
 type Model struct {
-	Model      string     `json:"model"`                 // Model name
-	Digest     string     `json:"digest,omitempty"`      // Model digest from the registry
-	ModifiedAt *time.Time `json:"modified_at,omitempty"` // When the model was last modified locally
+	Model      string     `json:"model"`
+	Digest     string     `json:"digest,omitempty"`
+	ModifiedAt *time.Time `json:"modified_at,omitempty"`
 }
 
 type Chat struct {
-	ID           string          `json:"id"`
-	Messages     []Message       `json:"messages"`
-	Title        string          `json:"title"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID     string    `json:"id"`
+	Messages []Message `json:"messages"`
+	Title    string    `json:"title"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// ArchivedAt is a nullable timestamp. NULL = active, non-NULL = archived.
+	// Populated by queryChats and getChatWithOptions; written only by
+	// archiveChat/unarchiveChat so that saveChat cannot clobber it.
+	ArchivedAt *time.Time `json:"archived_at,omitempty" ts_type:"Date | undefined" ts_transform:"__VALUE__ && new Date(__VALUE__)"`
+
+	// DeletedAt is a nullable timestamp. NULL = live, non-NULL = in the trash.
+	// Populated by queryChats and getChatWithOptions; written only by
+	// softDeleteChat/restoreChat/purgeChat.
+	DeletedAt *time.Time `json:"deleted_at,omitempty" ts_type:"Date | undefined" ts_transform:"__VALUE__ && new Date(__VALUE__)"`
+
 	BrowserState json.RawMessage `json:"browser_state,omitempty" ts_type:"BrowserStateData"`
 }
 
@@ -178,6 +189,9 @@ type Store struct {
 	// dbMu protects database initialization only
 	dbMu sync.Mutex
 	db   *database
+
+	// purgeOnce ensures the 30-day trash sweep runs at most once per Store.
+	purgeOnce sync.Once
 }
 
 var defaultDBPath = func() string {
@@ -242,7 +256,6 @@ func (s *Store) ensureDB() error {
 	// Generate device ID if needed
 	id, err := database.getID()
 	if err != nil || id == "" {
-		// Generate new UUID for device
 		u, err := uuid.NewV7()
 		if err == nil {
 			database.setID(u.String())
@@ -259,20 +272,40 @@ func (s *Store) ensureDB() error {
 		}
 	}
 
+	// 30-day trash sweep, once per Store lifetime.
+	s.purgeOnce.Do(func() {
+		if err := s.purgeExpiredChats(); err != nil {
+			slog.Warn("failed to purge expired chats", "error", err)
+		}
+	})
+
 	return nil
 }
 
-// migrateFromConfig attempts to migrate ID and FirstTimeRun from config.json
+// purgeExpiredChats deletes every chat whose deleted_at is older than 30 days
+// and removes their image dirs. Called once from ensureDB so the trash never
+// grows unbounded when the app is left running across sessions.
+func (s *Store) purgeExpiredChats() error {
+	ids, err := s.db.purgeExpiredChats(30 * 24 * time.Hour)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		chatImgDir := filepath.Join(s.ImgDir(), id)
+		if err := os.RemoveAll(chatImgDir); err != nil {
+			slog.Warn("failed to delete expired chat images", "chat_id", id, "error", err)
+		}
+	}
+	return nil
+}
+
 func (s *Store) migrateFromConfig(database *database) error {
 	configPath := legacyConfigPath
 
-	// Check if config.json exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// No config to migrate, mark as migrated
 		return database.setConfigMigrated(true)
 	}
 
-	// Read the config file
 	b, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("read legacy config: %w", err)
@@ -280,12 +313,10 @@ func (s *Store) migrateFromConfig(database *database) error {
 
 	var legacy legacyData
 	if err := json.Unmarshal(b, &legacy); err != nil {
-		// If we can't parse it, just mark as migrated and move on
 		slog.Warn("failed to parse legacy config.json", "error", err)
 		return database.setConfigMigrated(true)
 	}
 
-	// Migrate the ID if present
 	if legacy.ID != "" {
 		if err := database.setID(legacy.ID); err != nil {
 			return fmt.Errorf("migrate device ID: %w", err)
@@ -293,13 +324,12 @@ func (s *Store) migrateFromConfig(database *database) error {
 		slog.Info("migrated device ID from config.json")
 	}
 
-	hasCompleted := legacy.FirstTimeRun // If old FirstTimeRun is true, it means first run was completed
+	hasCompleted := legacy.FirstTimeRun
 	if err := database.setHasCompletedFirstRun(hasCompleted); err != nil {
 		return fmt.Errorf("migrate first time run: %w", err)
 	}
 	slog.Info("migrated first run status from config.json", "hasCompleted", hasCompleted)
 
-	// Mark as migrated
 	if err := database.setConfigMigrated(true); err != nil {
 		return fmt.Errorf("mark config as migrated: %w", err)
 	}
@@ -312,7 +342,6 @@ func (s *Store) ID() (string, error) {
 	if err := s.ensureDB(); err != nil {
 		return "", err
 	}
-
 	return s.db.getID()
 }
 
@@ -320,7 +349,6 @@ func (s *Store) HasCompletedFirstRun() (bool, error) {
 	if err := s.ensureDB(); err != nil {
 		return false, err
 	}
-
 	return s.db.getHasCompletedFirstRun()
 }
 
@@ -328,7 +356,6 @@ func (s *Store) SetHasCompletedFirstRun(hasCompleted bool) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.setHasCompletedFirstRun(hasCompleted)
 }
 
@@ -342,7 +369,6 @@ func (s *Store) Settings() (Settings, error) {
 		return Settings{}, err
 	}
 
-	// Set default models directory if not set
 	if settings.Models == "" {
 		dir := os.Getenv("OLLAMA_MODELS")
 		if dir != "" {
@@ -362,16 +388,76 @@ func (s *Store) SetSettings(settings Settings) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.setSettings(settings)
 }
 
+// Chats returns every chat that is neither archived nor deleted.
 func (s *Store) Chats() ([]Chat, error) {
 	if err := s.ensureDB(); err != nil {
 		return nil, err
 	}
-
 	return s.db.getAllChats()
+}
+
+// ArchivedChats returns archived chats, most recently archived first.
+// Soft-deleted chats are excluded.
+func (s *Store) ArchivedChats() ([]Chat, error) {
+	if err := s.ensureDB(); err != nil {
+		return nil, err
+	}
+	return s.db.getArchivedChats()
+}
+
+// DeletedChats returns soft-deleted chats still within the 30-day grace
+// window, most recently deleted first.
+func (s *Store) DeletedChats() ([]Chat, error) {
+	if err := s.ensureDB(); err != nil {
+		return nil, err
+	}
+	return s.db.getDeletedChats()
+}
+
+// ArchiveChat hides the chat from the active list without deleting it. The
+// chat stays fully readable by ID and its messages, tool calls and attachments
+// are untouched.
+func (s *Store) ArchiveChat(id string) error {
+	if err := s.ensureDB(); err != nil {
+		return err
+	}
+	return s.db.archiveChat(id)
+}
+
+// UnarchiveChat returns an archived chat to the active list.
+func (s *Store) UnarchiveChat(id string) error {
+	if err := s.ensureDB(); err != nil {
+		return err
+	}
+	return s.db.unarchiveChat(id)
+}
+
+// RestoreChat clears deleted_at, moving a chat out of the trash back into the
+// active list (or back into the archive, if archived_at is still set).
+func (s *Store) RestoreChat(id string) error {
+	if err := s.ensureDB(); err != nil {
+		return err
+	}
+	return s.db.restoreChat(id)
+}
+
+// PurgeChat permanently deletes a soft-deleted chat and its images. Irreversible.
+func (s *Store) PurgeChat(id string) error {
+	if err := s.ensureDB(); err != nil {
+		return err
+	}
+	if err := s.db.purgeChat(id); err != nil {
+		return err
+	}
+
+	chatImgDir := filepath.Join(s.ImgDir(), id)
+	if err := os.RemoveAll(chatImgDir); err != nil {
+		slog.Warn("failed to delete purged chat images", "chat_id", id, "error", err)
+	}
+	return nil
 }
 
 func (s *Store) Chat(id string) (*Chat, error) {
@@ -395,35 +481,22 @@ func (s *Store) SetChat(chat Chat) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.saveChat(chat)
 }
 
+// DeleteChat soft-deletes a chat: it moves into the "recently deleted" list
+// for 30 days. Use PurgeChat for permanent removal.
 func (s *Store) DeleteChat(id string) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
-	// Delete from database
-	if err := s.db.deleteChat(id); err != nil {
-		return fmt.Errorf("%w: chat %s", not.Found, id)
-	}
-
-	// Also delete associated images
-	chatImgDir := filepath.Join(s.ImgDir(), id)
-	if err := os.RemoveAll(chatImgDir); err != nil {
-		// Log error but don't fail the deletion
-		slog.Warn("failed to delete chat images", "chat_id", id, "error", err)
-	}
-
-	return nil
+	return s.db.softDeleteChat(id)
 }
 
 func (s *Store) WindowSize() (int, int, error) {
 	if err := s.ensureDB(); err != nil {
 		return 0, 0, err
 	}
-
 	return s.db.getWindowSize()
 }
 
@@ -431,7 +504,6 @@ func (s *Store) SetWindowSize(width, height int) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.setWindowSize(width, height)
 }
 
@@ -439,7 +511,6 @@ func (s *Store) UpdateLastMessage(chatID string, message Message) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.updateLastMessage(chatID, message)
 }
 
@@ -447,7 +518,6 @@ func (s *Store) AppendMessage(chatID string, message Message) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.appendMessage(chatID, message)
 }
 
@@ -455,7 +525,6 @@ func (s *Store) UpdateChatBrowserState(chatID string, state json.RawMessage) err
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.updateChatBrowserState(chatID, state)
 }
 
@@ -463,7 +532,6 @@ func (s *Store) User() (*User, error) {
 	if err := s.ensureDB(); err != nil {
 		return nil, err
 	}
-
 	return s.db.getUser()
 }
 
@@ -471,7 +539,6 @@ func (s *Store) SetUser(user User) error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	user.CachedAt = time.Now()
 	return s.db.setUser(user)
 }
@@ -480,7 +547,6 @@ func (s *Store) ClearUser() error {
 	if err := s.ensureDB(); err != nil {
 		return err
 	}
-
 	return s.db.clearUser()
 }
 

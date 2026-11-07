@@ -162,9 +162,11 @@ func TestChatDeletionWithCascade(t *testing.T) {
 			t.Errorf("expected 2 messages for test chat, got %d", messageCountForChat)
 		}
 
-		// Delete the chat
-		if err := db.deleteChat(testChatID); err != nil {
-			t.Fatalf("failed to delete chat: %v", err)
+		// Hard delete the chat. Soft delete only stamps deleted_at and keeps
+		// rows; the cascade behavior asserted below belongs to purgeChat, which
+		// is the only path that actually DELETE FROMs the chat row.
+		if err := db.purgeChat(testChatID); err != nil {
+			t.Fatalf("failed to purge chat: %v", err)
 		}
 
 		// Verify chat is deleted
@@ -268,6 +270,218 @@ func TestChatDeletionWithCascade(t *testing.T) {
 		orphanedCountAfter := countRowsWithCondition(t, db, "messages", "chat_id = ?", testChatID)
 		if orphanedCountAfter != 0 {
 			t.Errorf("expected 0 orphaned messages after cleanup, got %d", orphanedCountAfter)
+		}
+	})
+}
+
+// TestChatSoftDelete exercises the deferred-delete lifecycle: softDeleteChat
+// stamps deleted_at without touching rows, the chat disappears from the active
+// and archived lists, appears in the trash list, and restoreChat brings it
+// back. Purging is tested separately in TestChatDeletionWithCascade.
+func TestChatSoftDelete(t *testing.T) {
+	t.Run("soft delete hides chat but preserves rows", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dbPath := filepath.Join(tmpDir, "test.db")
+		db, err := newDatabase(dbPath)
+		if err != nil {
+			t.Fatalf("failed to create database: %v", err)
+		}
+		defer db.Close()
+
+		testChatID := "test-chat-soft-delete-123"
+		testChat := Chat{
+			ID:        testChatID,
+			Title:     "Test Chat for Soft Delete",
+			CreatedAt: time.Now(),
+			Messages: []Message{
+				{Role: "user", Content: "first message", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+				{Role: "assistant", Content: "reply", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			},
+		}
+		if err := db.saveChat(testChat); err != nil {
+			t.Fatalf("failed to save test chat: %v", err)
+		}
+
+		// Chat starts in the active list.
+		active, err := db.getAllChats()
+		if err != nil {
+			t.Fatalf("getAllChats before delete: %v", err)
+		}
+		if len(active) != 1 || active[0].ID != testChatID {
+			t.Fatalf("expected test chat in active list before delete, got %+v", active)
+		}
+
+		// Soft delete.
+		if err := db.softDeleteChat(testChatID); err != nil {
+			t.Fatalf("softDeleteChat: %v", err)
+		}
+
+		// Row and messages must still exist — soft delete is not a purge.
+		if got := countRows(t, db, "chats"); got != 1 {
+			t.Errorf("expected 1 chat row after soft delete, got %d", got)
+		}
+		if got := countRowsWithCondition(t, db, "messages", "chat_id = ?", testChatID); got != 2 {
+			t.Errorf("expected 2 messages after soft delete, got %d", got)
+		}
+
+		// deleted_at must be set.
+		var deletedAt sql.NullTime
+		if err := db.conn.QueryRow(
+			"SELECT deleted_at FROM chats WHERE id = ?", testChatID,
+		).Scan(&deletedAt); err != nil {
+			t.Fatalf("failed to read deleted_at: %v", err)
+		}
+		if !deletedAt.Valid {
+			t.Error("expected deleted_at to be set after soft delete")
+		}
+
+		// Active list must now exclude it.
+		active, err = db.getAllChats()
+		if err != nil {
+			t.Fatalf("getAllChats after soft delete: %v", err)
+		}
+		if len(active) != 0 {
+			t.Errorf("expected 0 active chats after soft delete, got %d", len(active))
+		}
+
+		// Trash list must include it.
+		deleted, err := db.getDeletedChats()
+		if err != nil {
+			t.Fatalf("getDeletedChats: %v", err)
+		}
+		if len(deleted) != 1 || deleted[0].ID != testChatID {
+			t.Errorf("expected soft-deleted chat %q in trash, got %+v", testChatID, deleted)
+		}
+
+		// Restore returns it to the active list and clears deleted_at.
+		if err := db.restoreChat(testChatID); err != nil {
+			t.Fatalf("restoreChat: %v", err)
+		}
+		active, err = db.getAllChats()
+		if err != nil {
+			t.Fatalf("getAllChats after restore: %v", err)
+		}
+		if len(active) != 1 || active[0].ID != testChatID {
+			t.Errorf("expected restored chat in active list, got %+v", active)
+		}
+
+		deletedAt = sql.NullTime{}
+		if err := db.conn.QueryRow(
+			"SELECT deleted_at FROM chats WHERE id = ?", testChatID,
+		).Scan(&deletedAt); err != nil {
+			t.Fatalf("failed to read deleted_at after restore: %v", err)
+		}
+		if deletedAt.Valid {
+			t.Error("expected deleted_at to be NULL after restore")
+		}
+	})
+
+	t.Run("restore preserves archived_at", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dbPath := filepath.Join(tmpDir, "test.db")
+		db, err := newDatabase(dbPath)
+		if err != nil {
+			t.Fatalf("failed to create database: %v", err)
+		}
+		defer db.Close()
+
+		testChatID := "test-chat-archive-restore-123"
+		if err := db.saveChat(Chat{
+			ID:        testChatID,
+			Title:     "Archived then deleted",
+			CreatedAt: time.Now(),
+			Messages: []Message{
+				{Role: "user", Content: "hi", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			},
+		}); err != nil {
+			t.Fatalf("failed to save test chat: %v", err)
+		}
+
+		// Archive, then delete. Restore must return it to the archive, not the
+		// active list — that's the whole point of keeping archived_at intact
+		// across a trash round-trip.
+		if err := db.archiveChat(testChatID); err != nil {
+			t.Fatalf("archiveChat: %v", err)
+		}
+		if err := db.softDeleteChat(testChatID); err != nil {
+			t.Fatalf("softDeleteChat: %v", err)
+		}
+		if err := db.restoreChat(testChatID); err != nil {
+			t.Fatalf("restoreChat: %v", err)
+		}
+
+		active, err := db.getAllChats()
+		if err != nil {
+			t.Fatalf("getAllChats: %v", err)
+		}
+		if len(active) != 0 {
+			t.Errorf("expected 0 active chats after restoring an archived chat, got %d", len(active))
+		}
+
+		archived, err := db.getArchivedChats()
+		if err != nil {
+			t.Fatalf("getArchivedChats: %v", err)
+		}
+		if len(archived) != 1 || archived[0].ID != testChatID {
+			t.Errorf("expected restored chat back in archive, got %+v", archived)
+		}
+	})
+
+	t.Run("purge expired chats removes only old trash", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dbPath := filepath.Join(tmpDir, "test.db")
+		db, err := newDatabase(dbPath)
+		if err != nil {
+			t.Fatalf("failed to create database: %v", err)
+		}
+		defer db.Close()
+
+		oldID := "expired-chat"
+		freshID := "fresh-deleted-chat"
+
+		for _, id := range []string{oldID, freshID} {
+			if err := db.saveChat(Chat{
+				ID:        id,
+				Title:     id,
+				CreatedAt: time.Now(),
+				Messages: []Message{
+					{Role: "user", Content: "x", CreatedAt: time.Now(), UpdatedAt: time.Now()},
+				},
+			}); err != nil {
+				t.Fatalf("failed to save chat %s: %v", id, err)
+			}
+			if err := db.softDeleteChat(id); err != nil {
+				t.Fatalf("failed to soft delete %s: %v", id, err)
+			}
+		}
+
+		// Backdate one chat's deleted_at past the 30-day cutoff.
+		if _, err := db.conn.Exec(
+			"UPDATE chats SET deleted_at = datetime('now', '-31 days') WHERE id = ?", oldID,
+		); err != nil {
+			t.Fatalf("failed to backdate deleted_at: %v", err)
+		}
+
+		removed, err := db.purgeExpiredChats(30 * 24 * time.Hour)
+		if err != nil {
+			t.Fatalf("purgeExpiredChats: %v", err)
+		}
+		if len(removed) != 1 || removed[0] != oldID {
+			t.Errorf("expected only %q to be purged, got %+v", oldID, removed)
+		}
+
+		// The old chat and its messages are gone.
+		if got := countRowsWithCondition(t, db, "messages", "chat_id = ?", oldID); got != 0 {
+			t.Errorf("expected 0 messages for purged chat, got %d", got)
+		}
+
+		// The fresh chat is still in the trash.
+		deleted, err := db.getDeletedChats()
+		if err != nil {
+			t.Fatalf("getDeletedChats: %v", err)
+		}
+		if len(deleted) != 1 || deleted[0].ID != freshID {
+			t.Errorf("expected %q still in trash, got %+v", freshID, deleted)
 		}
 	})
 }

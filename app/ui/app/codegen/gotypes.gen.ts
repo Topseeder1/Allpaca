@@ -7,6 +7,8 @@ export class ChatInfo {
     userExcerpt: string;
     createdAt: Date;
     updatedAt: Date;
+    archivedAt?: Date | undefined;
+    deletedAt?: Date | undefined;
 
     constructor(source: any = {}) {
         if ('string' === typeof source) source = JSON.parse(source);
@@ -15,6 +17,8 @@ export class ChatInfo {
         this.userExcerpt = source["userExcerpt"];
         this.createdAt = new Date(source["createdAt"]);
         this.updatedAt = new Date(source["updatedAt"]);
+        this.archivedAt = source["archivedAt"] && new Date(source["archivedAt"]);
+        this.deletedAt = source["deletedAt"] && new Date(source["deletedAt"]);
     }
 }
 export class ChatsResponse {
@@ -158,6 +162,8 @@ export class Chat {
     messages: Message[];
     title: string;
     created_at: Time;
+    archived_at?: Date | undefined;
+    deleted_at?: Date | undefined;
     browser_state?: BrowserStateData;
 
     constructor(source: any = {}) {
@@ -166,6 +172,8 @@ export class Chat {
         this.messages = this.convertValues(source["messages"], Message);
         this.title = source["title"];
         this.created_at = this.convertValues(source["created_at"], Time);
+        this.archived_at = source["archived_at"] && new Date(source["archived_at"]);
+        this.deleted_at = source["deleted_at"] && new Date(source["deleted_at"]);
         this.browser_state = source["browser_state"];
     }
 

@@ -1,24 +1,34 @@
 import { useChats } from "@/hooks/useChats";
+import { useArchivedChats } from "@/hooks/useArchivedChats";
+import { useDeletedChats } from "@/hooks/useDeletedChats";
 import { useRenameChat } from "@/hooks/useRenameChat";
 import { useDeleteChat } from "@/hooks/useDeleteChat";
+import { useArchiveChat } from "@/hooks/useArchiveChat";
 import { useQueryClient } from "@tanstack/react-query";
-import { getChat } from "@/api";
+import { getChat, restoreChat, purgeChat } from "@/api";
 import { Link } from "@/components/ui/link";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ChatsResponse } from "@/gotypes";
-import { CogIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/outline";
+import {
+  CogIcon,
+  EllipsisHorizontalIcon,
+  ArrowUturnLeftIcon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import { UndoToast } from "@/components/UndoToast";
 import { ChatActionsMenu } from "@/components/ChatActionsMenu";
+import { CollapsibleSection } from "@/components/CollapsibleSection";
 
 // there's a hidden debug feature to copy a chat's data to the clipboard by
 // holding shift and clicking this many times within this many seconds
 const DEBUG_SHIFT_CLICKS_REQUIRED = 5;
-const DEBUG_SHIFT_CLICK_WINDOW_MS = 7000; // 7 seconds
+const DEBUG_SHIFT_CLICK_WINDOW_MS = 7000;
 
 const ACTION_MENU_WIDTH = 160;
-const ACTION_MENU_HEIGHT = 84; // two items + container padding, used for flip/clamp
+const ACTION_MENU_HEIGHT = 112; // three items + padding, used for flip/clamp
 const ACTION_MENU_MARGIN = 8;
+const PURGE_CONFIRM_WINDOW_MS = 4000;
 
 interface ChatSidebarProps {
   currentChatId?: string;
@@ -29,12 +39,16 @@ interface ActionMenuState {
   title: string;
   top: number;
   left: number;
+  isArchived?: boolean;
 }
 
 export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   const { data, isLoading, error } = useChats();
+  const archivedQuery = useArchivedChats();
+  const deletedQuery = useDeletedChats();
   const queryClient = useQueryClient();
   const renameMutation = useRenameChat();
+  const archiveMutation = useArchiveChat();
   const {
     schedule: scheduleDelete,
     undo: undoDelete,
@@ -46,6 +60,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   const [shiftClicks, setShiftClicks] = useState<Record<string, number[]>>({});
   const [copiedChatId, setCopiedChatId] = useState<string | null>(null);
   const [actionMenu, setActionMenu] = useState<ActionMenuState | null>(null);
+  const [confirmPurgeId, setConfirmPurgeId] = useState<string | null>(null);
 
   const closeActionMenu = useCallback(() => setActionMenu(null), []);
 
@@ -74,32 +89,26 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     const newTitle = editValue.trim();
     const chatId = editingChatId;
 
-    // Exit edit mode immediately to prevent flash
     setEditingChatId(null);
     setEditValue("");
 
-    // Optimistically update the cache
     queryClient.setQueryData(
       ["chats"],
       (oldData: ChatsResponse | undefined) => {
         if (!oldData?.chatInfos) return oldData;
-        return {
+        return new ChatsResponse({
           ...oldData,
           chatInfos: oldData.chatInfos.map((chat) =>
             chat.id === chatId ? { ...chat, title: newTitle } : chat,
           ),
-        };
+        });
       },
     );
 
     try {
-      await renameMutation.mutateAsync({
-        chatId: chatId,
-        title: newTitle,
-      });
+      await renameMutation.mutateAsync({ chatId, title: newTitle });
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error: unknown) {
-      // Revert optimistic update on error
       queryClient.invalidateQueries({ queryKey: ["chats"] });
     }
   }, [editingChatId, editValue, renameMutation, queryClient]);
@@ -127,7 +136,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [editingChatId, editValue, saveRename]);
+  }, [editingChatId, saveRename]);
 
   const sortedChats = useMemo(() => {
     if (!data?.chatInfos) return [];
@@ -155,7 +164,6 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     return date > weekAgo && !isToday(date);
   };
 
-  // Group chats by time period
   const groupedChats = useMemo(() => {
     const groups = {
       today: [] as typeof sortedChats,
@@ -186,13 +194,54 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
 
   const handleDeleteChat = useCallback(
     (chatId: string, chatTitle: string) => {
-      // Deferred delete with an undo window — no blocking confirm dialog.
       scheduleDelete(chatId, chatTitle);
     },
     [scheduleDelete],
   );
 
-  // implementation of the hidden debug feature to copy a chat's data to the clipboard
+  const handleArchiveToggle = useCallback(
+    async (chatId: string, archive: boolean) => {
+      try {
+        await archiveMutation.mutateAsync({ chatId, archive });
+      } catch (err: unknown) {
+        console.error("Failed to toggle archive:", err);
+      }
+    },
+    [archiveMutation],
+  );
+
+  const handleRestoreChat = useCallback(
+    async (chatId: string) => {
+      try {
+        await restoreChat(chatId);
+        queryClient.invalidateQueries({ queryKey: ["chats"] });
+      } catch (err) {
+        console.error("Failed to restore chat:", err);
+      }
+    },
+    [queryClient],
+  );
+
+  const handlePurgeChat = useCallback(
+    async (chatId: string) => {
+      if (confirmPurgeId !== chatId) {
+        setConfirmPurgeId(chatId);
+        setTimeout(() => {
+          setConfirmPurgeId((current) => (current === chatId ? null : current));
+        }, PURGE_CONFIRM_WINDOW_MS);
+        return;
+      }
+      try {
+        await purgeChat(chatId);
+        queryClient.invalidateQueries({ queryKey: ["chats"] });
+      } catch (err) {
+        console.error("Failed to purge chat:", err);
+      }
+      setConfirmPurgeId(null);
+    },
+    [confirmPurgeId, queryClient],
+  );
+
   const handleShiftClick = useCallback(
     async (e: React.MouseEvent, chatId: string) => {
       if (!e.shiftKey) return false;
@@ -206,25 +255,16 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
       );
       recentClicks.push(now);
 
-      setShiftClicks((prev) => ({
-        ...prev,
-        [chatId]: recentClicks,
-      }));
+      setShiftClicks((prev) => ({ ...prev, [chatId]: recentClicks }));
 
       if (recentClicks.length >= DEBUG_SHIFT_CLICKS_REQUIRED) {
         try {
           const chatData = await getChat(chatId);
           const jsonString = JSON.stringify(chatData, null, 2);
           await navigator.clipboard.writeText(jsonString);
-
-          // visual feedback
           setCopiedChatId(chatId);
           setTimeout(() => setCopiedChatId(null), 2000);
-
-          setShiftClicks((prev) => ({
-            ...prev,
-            [chatId]: [],
-          }));
+          setShiftClicks((prev) => ({ ...prev, [chatId]: [] }));
         } catch (error) {
           console.error("Failed to copy chat data:", error);
         }
@@ -235,33 +275,40 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     [shiftClicks],
   );
 
-  // Right-click keeps using the native shell menu. `window.menu` only stages
-  // items for the shell's `ContextMenuRequested` handler, which fires on a
-  // trusted right-click, so this path is correct for contextmenu and only for
-  // contextmenu.
+  // Right-click keeps using the native shell menu.
   const handleContextMenu = useCallback(
-    async (_: React.MouseEvent, chatId: string, chatTitle: string) => {
+    async (
+      _: React.MouseEvent,
+      chatId: string,
+      chatTitle: string,
+      isArchived: boolean = false,
+    ) => {
       const selectedAction = await window.menu([
         { label: "Rename", enabled: true },
+        { label: isArchived ? "Unarchive" : "Archive", enabled: true },
         { label: "Delete", enabled: true },
       ]);
 
       if (selectedAction === "Rename") {
         startEditing(chatId, chatTitle);
+      } else if (selectedAction === "Archive") {
+        handleArchiveToggle(chatId, true);
+      } else if (selectedAction === "Unarchive") {
+        handleArchiveToggle(chatId, false);
       } else if (selectedAction === "Delete") {
         handleDeleteChat(chatId, chatTitle);
       }
     },
-    [startEditing, handleDeleteChat],
+    [startEditing, handleDeleteChat, handleArchiveToggle],
   );
 
-  // The `⋯` button is a left-click, which never reaches the shell's native
-  // context-menu handler. Render our own menu for it instead of trying to
-  // synthesize a contextmenu event (untrusted events do not open the native
-  // menu). Position is viewport-clamped and flips above the button when there
-  // is no room below.
   const openActionMenu = useCallback(
-    (chatId: string, title: string, anchor: HTMLElement) => {
+    (
+      chatId: string,
+      title: string,
+      anchor: HTMLElement,
+      isArchived: boolean = false,
+    ) => {
       const rect = anchor.getBoundingClientRect();
 
       let top = rect.bottom + 4;
@@ -277,7 +324,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         left = window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_MARGIN;
       }
 
-      setActionMenu({ chatId, title, top, left });
+      setActionMenu({ chatId, title, top, left, isArchived });
     },
     [],
   );
@@ -303,6 +350,8 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   }
 
   const isWindows = navigator.platform.toLowerCase().includes("win");
+  const archivedChats = archivedQuery.data?.chatInfos ?? [];
+  const deletedChats = deletedQuery.data?.chatInfos ?? [];
 
   return (
     <nav className="flex flex-1 flex-col min-h-0 select-none">
@@ -337,120 +386,303 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
           </Link>
         )}
       </header>
-      <div className="flex flex-1 flex-col px-4 py-1 overflow-y-auto overscroll-auto scrollbar-gutter">
-        <div className="flex flex-col gap-3 pt-4">
-          {chatGroups.map((group) => (
-            <div key={group.name} className="flex flex-col gap-0.5">
-              <h3 className="text-xs font-medium text-fg-muted px-2 py-1 select-none">
-                {group.name}
-              </h3>
-              {group.chats.map((chat) => (
-                <div
-                  key={chat.id}
-                  className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
-                    chat.id === currentChatId
-                      ? "bg-surface-hover text-fg"
-                      : ""
-                  }`}
-                  onMouseEnter={() => handleMouseEnter(chat.id)}
-                  onContextMenu={(e) =>
-                    handleContextMenu(
-                      e,
+
+      {/*
+        Three bounded widgets stacked vertically. No single scroll on this
+        container: Chats grows to fill the remaining height and scrolls
+        internally, while Archived and Recently Deleted are capped widgets that
+        scroll independently when expanded. Add enough chats and the sidebar
+        still has exactly one scrollbar per active panel, never one runaway list.
+      */}
+      <div className="flex flex-1 flex-col min-h-0 gap-1 px-4 py-1">
+        <CollapsibleSection
+          title="Chats"
+          count={sortedChats.length}
+          defaultOpen
+          className="flex-1"
+          panelClassName="flex flex-col gap-3 pt-1 overflow-y-auto overscroll-auto scrollbar-gutter min-h-0 flex-1"
+        >
+          {chatGroups.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-fg-muted/70 select-none">
+              No conversations yet
+            </p>
+          ) : (
+            chatGroups.map((group) => (
+              <div key={group.name} className="flex flex-col gap-0.5">
+                <h3 className="text-xs font-medium text-fg-muted px-2 py-1 select-none">
+                  {group.name}
+                </h3>
+                {group.chats.map((chat) => (
+                  <div
+                    key={chat.id}
+                    className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
+                      chat.id === currentChatId
+                        ? "bg-surface-hover text-fg"
+                        : ""
+                    }`}
+                    onMouseEnter={() => handleMouseEnter(chat.id)}
+                    onContextMenu={(e) =>
+                      handleContextMenu(
+                        e,
+                        chat.id,
+                        chat.title ||
+                          chat.userExcerpt ||
+                          chat.createdAt.toLocaleString(),
+                      )
+                    }
+                  >
+                    {editingChatId === chat.id ? (
+                      <div className="flex-1 flex items-center min-w-0 px-2 py-2 bg-surface-hover text-fg rounded-lg">
+                        <span className="truncate font-sans text-sm w-full">
+                          <input
+                            ref={inputRef}
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                saveRename();
+                              } else if (e.key === "Escape") {
+                                setEditingChatId(null);
+                                setEditValue("");
+                              }
+                            }}
+                            className="bg-transparent border-0 focus:outline-none w-full"
+                            style={{
+                              font: "inherit",
+                              lineHeight: "inherit",
+                              padding: 0,
+                              margin: 0,
+                            }}
+                          />
+                        </span>
+                      </div>
+                    ) : (
+                      <Link
+                        to="/c/$chatId"
+                        params={{ chatId: chat.id }}
+                        className="flex-1 flex items-center min-w-0 px-2 py-2 select-none"
+                        onClick={(e) => {
+                          handleShiftClick(e, chat.id);
+                        }}
+                        draggable={false}
+                      >
+                        <span className="truncate font-sans text-sm">
+                          {chat.title ||
+                            chat.userExcerpt ||
+                            chat.createdAt.toLocaleString()}
+                        </span>
+                        {copiedChatId === chat.id && (
+                          <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                            Copied!
+                          </span>
+                        )}
+                      </Link>
+                    )}
+                    {editingChatId !== chat.id && (
+                      <button
+                        type="button"
+                        aria-label="Chat actions"
+                        aria-haspopup="menu"
+                        aria-expanded={actionMenu?.chatId === chat.id}
+                        title="Chat actions"
+                        data-chat-menu-trigger
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (actionMenu?.chatId === chat.id) {
+                            setActionMenu(null);
+                            return;
+                          }
+                          openActionMenu(
+                            chat.id,
+                            chat.title ||
+                              chat.userExcerpt ||
+                              chat.createdAt.toLocaleString(),
+                            e.currentTarget,
+                            false,
+                          );
+                        }}
+                        className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
+                          chat.id === currentChatId ||
+                          actionMenu?.chatId === chat.id
+                            ? "opacity-100"
+                            : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+                        }`}
+                      >
+                        <EllipsisHorizontalIcon className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Archived"
+          count={archivedChats.length}
+          defaultOpen={false}
+          className="shrink-0"
+          panelClassName="flex flex-col gap-0.5 pt-1 overflow-y-auto max-h-40"
+        >
+          {archivedChats.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-fg-muted/70 select-none">
+              No archived conversations
+            </p>
+          ) : (
+            archivedChats.map((chat) => (
+              <div
+                key={chat.id}
+                className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
+                  chat.id === currentChatId
+                    ? "bg-surface-hover text-fg"
+                    : ""
+                }`}
+                onMouseEnter={() => handleMouseEnter(chat.id)}
+                onContextMenu={(e) =>
+                  handleContextMenu(
+                    e,
+                    chat.id,
+                    chat.title ||
+                      chat.userExcerpt ||
+                      chat.createdAt.toLocaleString(),
+                    true,
+                  )
+                }
+              >
+                <Link
+                  to="/c/$chatId"
+                  params={{ chatId: chat.id }}
+                  className="flex-1 flex items-center min-w-0 px-2 py-2 select-none"
+                  draggable={false}
+                >
+                  <span className="truncate font-sans text-sm">
+                    {chat.title ||
+                      chat.userExcerpt ||
+                      chat.createdAt.toLocaleString()}
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  aria-label="Chat actions"
+                  aria-haspopup="menu"
+                  aria-expanded={actionMenu?.chatId === chat.id}
+                  title="Chat actions"
+                  data-chat-menu-trigger
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (actionMenu?.chatId === chat.id) {
+                      setActionMenu(null);
+                      return;
+                    }
+                    openActionMenu(
                       chat.id,
                       chat.title ||
                         chat.userExcerpt ||
                         chat.createdAt.toLocaleString(),
-                    )
-                  }
+                      e.currentTarget,
+                      true,
+                    );
+                  }}
+                  className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
+                    chat.id === currentChatId ||
+                    actionMenu?.chatId === chat.id
+                      ? "opacity-100"
+                      : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+                  }`}
                 >
-                  {editingChatId === chat.id ? (
-                    <div className="flex-1 flex items-center min-w-0 px-2 py-2 bg-surface-hover text-fg rounded-lg">
-                      <span className="truncate font-sans text-sm w-full">
-                        <input
-                          ref={inputRef}
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              saveRename();
-                            } else if (e.key === "Escape") {
-                              setEditingChatId(null);
-                              setEditValue("");
-                            }
-                          }}
-                          className="bg-transparent border-0 focus:outline-none w-full"
-                          style={{
-                            font: "inherit",
-                            lineHeight: "inherit",
-                            padding: 0,
-                            margin: 0,
-                          }}
-                        />
-                      </span>
-                    </div>
-                  ) : (
-                    <Link
-                      to="/c/$chatId"
-                      params={{ chatId: chat.id }}
-                      className="flex-1 flex items-center min-w-0 px-2 py-2 select-none"
-                      onClick={(e) => {
-                        handleShiftClick(e, chat.id);
-                      }}
-                      draggable={false}
-                    >
-                      <span className="truncate font-sans text-sm">
+                  <EllipsisHorizontalIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Recently Deleted"
+          count={deletedChats.length}
+          defaultOpen={false}
+          className="shrink-0"
+          panelClassName="flex flex-col gap-0.5 pt-1 overflow-y-auto max-h-40"
+        >
+          {deletedChats.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-fg-muted/70 select-none">
+              No deleted conversations
+            </p>
+          ) : (
+            <>
+              {deletedChats.map((chat) => {
+                const isConfirming = confirmPurgeId === chat.id;
+                return (
+                  <div
+                    key={chat.id}
+                    className="group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover"
+                  >
+                    <div className="flex-1 min-w-0 px-2 py-2">
+                      <div className="truncate font-sans text-sm">
                         {chat.title ||
                           chat.userExcerpt ||
                           chat.createdAt.toLocaleString()}
-                      </span>
-                      {copiedChatId === chat.id && (
-                        <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                          Copied!
-                        </span>
+                      </div>
+                      {chat.deletedAt && (
+                        <div className="truncate text-[11px] text-fg-muted/70 mt-0.5">
+                          Deleted {formatRelative(chat.deletedAt)}
+                        </div>
                       )}
-                    </Link>
-                  )}
-                  {editingChatId !== chat.id && (
+                    </div>
                     <button
                       type="button"
-                      aria-label="Chat actions"
-                      aria-haspopup="menu"
-                      aria-expanded={actionMenu?.chatId === chat.id}
-                      title="Chat actions"
-                      data-chat-menu-trigger
+                      aria-label="Restore chat"
+                      title="Restore"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        if (actionMenu?.chatId === chat.id) {
-                          setActionMenu(null);
-                          return;
-                        }
-                        openActionMenu(
-                          chat.id,
-                          chat.title ||
-                            chat.userExcerpt ||
-                            chat.createdAt.toLocaleString(),
-                          e.currentTarget,
-                        );
+                        handleRestoreChat(chat.id);
                       }}
-                      className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
-                        chat.id === currentChatId ||
-                        actionMenu?.chatId === chat.id
-                          ? "opacity-100"
-                          : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+                      className="mr-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted hover:text-fg focus:outline-none"
+                    >
+                      <ArrowUturnLeftIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={
+                        isConfirming ? "Confirm delete forever" : "Delete forever"
+                      }
+                      title={
+                        isConfirming ? "Click again to confirm" : "Delete forever"
+                      }
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handlePurgeChat(chat.id);
+                      }}
+                      className={`mr-1 flex h-6 shrink-0 items-center justify-center rounded-md px-1.5 text-xs focus:outline-none ${
+                        isConfirming
+                          ? "bg-red-500 text-white hover:bg-red-600"
+                          : "text-fg-muted hover:text-red-500"
                       }`}
                     >
-                      <EllipsisHorizontalIcon className="h-4 w-4" />
+                      {isConfirming ? (
+                        <span className="whitespace-nowrap">Confirm?</span>
+                      ) : (
+                        <TrashIcon className="h-4 w-4" />
+                      )}
                     </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
+                  </div>
+                );
+              })}
+              <p className="px-2 pt-1 pb-0.5 text-[11px] text-fg-muted/70">
+                Purged after 30 days
+              </p>
+            </>
+          )}
+        </CollapsibleSection>
       </div>
+
       {pendingDeletes.length > 0 && (
         <div className="pointer-events-none fixed bottom-4 left-1/2 z-50 flex w-full max-w-md -translate-x-1/2 flex-col items-center gap-2 px-4">
           {pendingDeletes.map((item) => (
@@ -467,8 +699,16 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
           <ChatActionsMenu
             top={actionMenu.top}
             left={actionMenu.left}
+            isArchived={actionMenu.isArchived}
             onRename={() => {
               startEditing(actionMenu.chatId, actionMenu.title);
+              setActionMenu(null);
+            }}
+            onArchive={() => {
+              handleArchiveToggle(
+                actionMenu.chatId,
+                !actionMenu.isArchived,
+              );
               setActionMenu(null);
             }}
             onDelete={() => {
@@ -481,4 +721,12 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         )}
     </nav>
   );
+}
+
+function formatRelative(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "today";
+  if (days === 1) return "1 day ago";
+  return `${days} days ago`;
 }

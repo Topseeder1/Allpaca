@@ -150,23 +150,77 @@ func TestStore(t *testing.T) {
 	})
 
 	t.Run("delete chat", func(t *testing.T) {
+		// DeleteChat soft-deletes: the row and its messages survive so the
+		// chat can be restored. Only PurgeChat performs a hard delete.
 		if err := s.DeleteChat("test-chat-1"); err != nil {
 			t.Fatalf("failed to delete chat: %v", err)
 		}
 
-		// Verify it's gone
-		_, err := s.Chat("test-chat-1")
-		if err == nil {
-			t.Error("expected error retrieving deleted chat")
+		// Still loadable by ID. Soft delete is a visibility change, not a row
+		// removal — this is what lets the chat handler auto-restore on reply.
+		if _, err := s.Chat("test-chat-1"); err != nil {
+			t.Fatalf("expected soft-deleted chat to remain loadable by ID: %v", err)
 		}
 
-		// Verify other chat still exists
+		// Gone from the active list.
 		chats, err := s.Chats()
 		if err != nil {
 			t.Fatalf("failed to list chats: %v", err)
 		}
 		if len(chats) != 1 {
-			t.Fatalf("expected 1 chat after deletion, got %d", len(chats))
+			t.Fatalf("expected 1 active chat after deletion, got %d", len(chats))
+		}
+
+		// Present in the trash.
+		deleted, err := s.DeletedChats()
+		if err != nil {
+			t.Fatalf("failed to list deleted chats: %v", err)
+		}
+		if len(deleted) != 1 || deleted[0].ID != "test-chat-1" {
+			t.Fatalf("expected test-chat-1 in trash, got %+v", deleted)
+		}
+
+		// Restore returns it to the active list.
+		if err := s.RestoreChat("test-chat-1"); err != nil {
+			t.Fatalf("failed to restore chat: %v", err)
+		}
+		chats, err = s.Chats()
+		if err != nil {
+			t.Fatalf("failed to list chats after restore: %v", err)
+		}
+		if len(chats) != 2 {
+			t.Fatalf("expected 2 chats after restore, got %d", len(chats))
+		}
+	})
+
+	t.Run("purge chat", func(t *testing.T) {
+		// PurgeChat is the only hard delete. After it, Chat() genuinely errors
+		// and the row is gone from both the active list and the trash.
+		if err := s.DeleteChat("test-chat-1"); err != nil {
+			t.Fatalf("failed to delete chat: %v", err)
+		}
+		if err := s.PurgeChat("test-chat-1"); err != nil {
+			t.Fatalf("failed to purge chat: %v", err)
+		}
+
+		if _, err := s.Chat("test-chat-1"); err == nil {
+			t.Error("expected error retrieving purged chat")
+		}
+
+		chats, err := s.Chats()
+		if err != nil {
+			t.Fatalf("failed to list chats: %v", err)
+		}
+		if len(chats) != 1 {
+			t.Fatalf("expected 1 chat after purge, got %d", len(chats))
+		}
+
+		deleted, err := s.DeletedChats()
+		if err != nil {
+			t.Fatalf("failed to list deleted chats: %v", err)
+		}
+		if len(deleted) != 0 {
+			t.Fatalf("expected empty trash after purge, got %+v", deleted)
 		}
 	})
 }

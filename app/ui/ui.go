@@ -78,9 +78,6 @@ func (r *statusRecorder) Flush() {
 // Event is a string that represents the type of event being sent to the
 // client. It is used in the Server-Sent Events (SSE) protocol to identify
 // the type of data being sent.
-// The client (template) will use this type in the sse event listener to
-// determine how to handle the incoming data. It will also be used in the
-// sse-swap htmx event listener to determine how to handle the incoming data.
 type Event string
 
 const (
@@ -274,11 +271,17 @@ func (s *Server) Handler() http.Handler {
 
 	// API routes - handle first to take precedence
 	mux.Handle("GET /api/v1/chats", handle(s.listChats))
+	mux.Handle("GET /api/v1/chats/archived", handle(s.listArchivedChats))
+	mux.Handle("GET /api/v1/chats/deleted", handle(s.listDeletedChats))
 	mux.Handle("GET /api/v1/chat/{id}", handle(s.getChat))
 	mux.Handle("POST /api/v1/chat/{id}", handle(s.chat))
 	mux.Handle("DELETE /api/v1/chat/{id}", handle(s.deleteChat))
 	mux.Handle("POST /api/v1/create-chat", handle(s.createChat))
 	mux.Handle("PUT /api/v1/chat/{id}/rename", handle(s.renameChat))
+	mux.Handle("POST /api/v1/chat/{id}/archive", handle(s.archiveChat))
+	mux.Handle("POST /api/v1/chat/{id}/unarchive", handle(s.unarchiveChat))
+	mux.Handle("POST /api/v1/chat/{id}/restore", handle(s.restoreChat))
+	mux.Handle("DELETE /api/v1/chat/{id}/purge", handle(s.purgeChat))
 
 	mux.Handle("GET /api/v1/inference-compute", handle(s.getInferenceCompute))
 	mux.Handle("POST /api/v1/model/upstream", handle(s.modelUpstream))
@@ -425,6 +428,42 @@ func (s *Server) createChat(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 	chats, _ := s.Store.Chats()
+
+	chatInfos := make([]responses.ChatInfo, len(chats))
+	for i, chat := range chats {
+		chatInfos[i] = chatInfoFromChat(chat)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses.ChatsResponse{ChatInfos: chatInfos})
+	return nil
+}
+
+// listArchivedChats returns chats with archived_at set and deleted_at NULL.
+// Archived chats are excluded from listChats, so the two lists never overlap.
+func (s *Server) listArchivedChats(w http.ResponseWriter, r *http.Request) error {
+	chats, err := s.Store.ArchivedChats()
+	if err != nil {
+		return fmt.Errorf("failed to list archived chats: %w", err)
+	}
+
+	chatInfos := make([]responses.ChatInfo, len(chats))
+	for i, chat := range chats {
+		chatInfos[i] = chatInfoFromChat(chat)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses.ChatsResponse{ChatInfos: chatInfos})
+	return nil
+}
+
+// listDeletedChats returns soft-deleted chats still within the 30-day grace
+// window, most recently deleted first.
+func (s *Server) listDeletedChats(w http.ResponseWriter, r *http.Request) error {
+	chats, err := s.Store.DeletedChats()
+	if err != nil {
+		return fmt.Errorf("failed to list deleted chats: %w", err)
+	}
 
 	chatInfos := make([]responses.ChatInfo, len(chats))
 	for i, chat := range chats {
@@ -654,6 +693,25 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 	// Only add user message if not forceUpdate
 	if !req.ForceUpdate {
+		// Auto-unarchive / auto-restore: receiving a reply is the "signal"
+		// that a chat is back in active use. Mirrors Gmail/Photos behavior.
+		// Gated on !ForceUpdate because ForceUpdate is only a model refresh,
+		// not a user reply.
+		if chat.ArchivedAt != nil {
+			if err := s.Store.UnarchiveChat(cid); err != nil {
+				s.log().Warn("failed to auto-unarchive chat on reply", "error", err, "chat_id", cid)
+			} else {
+				chat.ArchivedAt = nil
+			}
+		}
+		if chat.DeletedAt != nil {
+			if err := s.Store.RestoreChat(cid); err != nil {
+				s.log().Warn("failed to auto-restore chat on reply", "error", err, "chat_id", cid)
+			} else {
+				chat.DeletedAt = nil
+			}
+		}
+
 		var messageOptions *store.MessageOptions
 		if len(req.Attachments) > 0 {
 			storeAttachments := make([]store.File, 0, len(req.Attachments))
@@ -719,8 +777,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check if the model exists locally by trying to show it
-	// TODO (jmorganca): skip this round trip and instead just act
-	// on a 404 error on chat
 	_, err = c.Show(ctx, &api.ShowRequest{Model: req.Model})
 	if err != nil || req.ForceUpdate {
 		// Create an empty assistant message to store the model information
@@ -731,8 +787,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		// Send download progress events while the model is being pulled
-		// TODO (jmorganca): this only shows the largest digest, but we
-		// should show the progress for the total size of the download
 		var largestDigest string
 		var largestTotal int64
 
@@ -810,7 +864,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check if the last user message has attachments
-	// TODO (parthsareen): this logic will change with directory drag and drop
 	hasAttachments := false
 	if len(chat.Messages) > 0 {
 		lastMsg := chat.Messages[len(chat.Messages)-1]
@@ -847,8 +900,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 	var thinkingTimeStart *time.Time = nil
 	var thinkingTimeEnd *time.Time = nil
 	// Request-only assistant tool_calls buffer
-	// if tool_calls arrive before any assistant text, we keep them here,
-	// inject them into the next request, and attach on first assistant content/thinking.
 	var pendingAssistantToolCalls []store.ToolCall
 
 	passNum := 1
@@ -988,14 +1039,12 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 								return err
 							}
 
-							// clear buffer to avoid-injecting again
 							pendingAssistantToolCalls = nil
 						}
 					}
 				}
 
 				for _, toolCall := range res.Message.ToolCalls {
-					// continues loop as tools were executed
 					toolsExecuted = true
 					result, content, err := registry.Execute(ctx, toolCall.Function.Name, toolCall.Function.Arguments.ToMap())
 					if err != nil {
@@ -1007,7 +1056,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 							return err
 						}
 
-						// Emit tool error event
 						toolResult := true
 						json.NewEncoder(w).Encode(responses.ChatEvent{
 							EventName: "tool",
@@ -1021,7 +1069,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 							Content:        &errContent,
 							ToolName:       &toolCall.Function.Name,
 							ToolResult:     &toolResult,
-							ToolResultData: nil, // No result data for errors
+							ToolResultData: nil,
 						})
 						flusher.Flush()
 						continue
@@ -1030,9 +1078,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 					var tr json.RawMessage
 					if strings.HasPrefix(toolCall.Function.Name, "browser.search") {
 						// For standalone web_search, ensure the tool message has readable content
-						// so the second-pass model can consume results, while keeping browser state flow intact.
-						// We still persist tool msg with content below.
-						// (No browser state update needed for standalone.)
 					} else if strings.HasPrefix(toolCall.Function.Name, "browser") {
 						stateBytes, err := json.Marshal(browser.State())
 						if err != nil {
@@ -1041,7 +1086,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 						if err := s.Store.UpdateChatBrowserState(chat.ID, json.RawMessage(stateBytes)); err != nil {
 							return fmt.Errorf("failed to persist browser state to chat: %w", err)
 						}
-						// tool result is not added to the tool message for the browser tool
 					} else {
 						var err error
 						tr, err = json.Marshal(result)
@@ -1049,7 +1093,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 							return fmt.Errorf("failed to marshal tool result: %w", err)
 						}
 					}
-					// ensure tool message sent back to the model has content (if empty, use a sensible fallback)
 					modelContent := content
 					if toolCall.Function.Name == "web_fetch" && modelContent == "" {
 						if str, ok := result.(string); ok {
@@ -1068,7 +1111,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 					s.Store.AppendMessage(chat.ID, toolMsg)
 
-					// Emit tool message event (matching agent pattern)
 					toolResult := true
 					json.NewEncoder(w).Encode(responses.ChatEvent{
 						EventName: "tool",
@@ -1081,7 +1123,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 					if browser != nil {
 						toolState = browser.State()
 					}
-					// Stream tool result to frontend
 
 					json.NewEncoder(w).Encode(responses.ChatEvent{
 						EventName:      "tool_result",
@@ -1099,11 +1140,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 				if len(chat.Messages) == 0 || chat.Messages[len(chat.Messages)-1].Role != "assistant" {
 					newMsg := store.NewMessage("assistant", "", &store.MessageOptions{Model: req.Model})
 					chat.Messages = append(chat.Messages, newMsg)
-					// Append new message to database
 					if err := s.Store.AppendMessage(chat.ID, newMsg); err != nil {
 						return err
 					}
-					// Attach any buffered tool_calls (request-only) now that assistant has started
 					if len(pendingAssistantToolCalls) > 0 {
 						lastMsg := &chat.Messages[len(chat.Messages)-1]
 						lastMsg.ToolCalls = pendingAssistantToolCalls
@@ -1115,18 +1154,15 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 					}
 				}
 
-				// Append token to last assistant message & persist
 				lastMsg := &chat.Messages[len(chat.Messages)-1]
 				lastMsg.Content += res.Message.Content
 				lastMsg.UpdatedAt = time.Now()
-				// Update thinking time fields
 				if thinkingTimeStart != nil {
 					lastMsg.ThinkingTimeStart = thinkingTimeStart
 				}
 				if thinkingTimeEnd != nil {
 					lastMsg.ThinkingTimeEnd = thinkingTimeEnd
 				}
-				// Use optimized update for streaming
 				if err := s.Store.UpdateLastMessage(chat.ID, *lastMsg); err != nil {
 					return err
 				}
@@ -1138,11 +1174,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 						Thinking: res.Message.Thinking,
 					})
 					chat.Messages = append(chat.Messages, newMsg)
-					// Append new message to database
 					if err := s.Store.AppendMessage(chat.ID, newMsg); err != nil {
 						return err
 					}
-					// Attach any buffered tool_calls now that assistant exists
 					if len(pendingAssistantToolCalls) > 0 {
 						lastMsg := &chat.Messages[len(chat.Messages)-1]
 						lastMsg.ToolCalls = pendingAssistantToolCalls
@@ -1153,11 +1187,9 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 						}
 					}
 				} else {
-					// Update thinking content of existing message
 					lastMsg := &chat.Messages[len(chat.Messages)-1]
 					lastMsg.Thinking += res.Message.Thinking
 					lastMsg.UpdatedAt = time.Now()
-					// Update thinking time fields
 					if thinkingTimeStart != nil {
 						lastMsg.ThinkingTimeStart = thinkingTimeStart
 					}
@@ -1165,7 +1197,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 						lastMsg.ThinkingTimeEnd = thinkingTimeEnd
 					}
 
-					// Use optimized update for streaming
 					if err := s.Store.UpdateLastMessage(chat.ID, *lastMsg); err != nil {
 						return err
 					}
@@ -1190,8 +1221,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// handle cases where thinking started but didn't finish
-	// this can happen if the client disconnects or the request is cancelled
-	// TODO (jmorganca): this should be merged with code above
 	if thinkingTimeStart != nil && thinkingTimeEnd == nil {
 		now := time.Now()
 		thinkingTimeEnd = &now
@@ -1302,6 +1331,87 @@ func (s *Server) renameChat(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// archiveChat sets archived_at on the chat, removing it from the active list
+// while keeping it fully readable. Idempotent: archiving an already-archived
+// chat just refreshes the timestamp.
+func (s *Server) archiveChat(w http.ResponseWriter, r *http.Request) error {
+	cid := r.PathValue("id")
+	if cid == "" {
+		return fmt.Errorf("chat ID is required")
+	}
+
+	if err := s.Store.ArchiveChat(cid); err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("chat not found")
+		}
+		return fmt.Errorf("failed to archive chat: %w", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// unarchiveChat clears archived_at, returning the chat to the active list.
+func (s *Server) unarchiveChat(w http.ResponseWriter, r *http.Request) error {
+	cid := r.PathValue("id")
+	if cid == "" {
+		return fmt.Errorf("chat ID is required")
+	}
+
+	if err := s.Store.UnarchiveChat(cid); err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("chat not found")
+		}
+		return fmt.Errorf("failed to unarchive chat: %w", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// restoreChat clears deleted_at, moving a soft-deleted chat back into the
+// active list (or back into the archive if archived_at is still set).
+func (s *Server) restoreChat(w http.ResponseWriter, r *http.Request) error {
+	cid := r.PathValue("id")
+	if cid == "" {
+		return fmt.Errorf("chat ID is required")
+	}
+
+	if err := s.Store.RestoreChat(cid); err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("chat not found")
+		}
+		return fmt.Errorf("failed to restore chat: %w", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// purgeChat permanently deletes a soft-deleted chat and its images. Irreversible.
+func (s *Server) purgeChat(w http.ResponseWriter, r *http.Request) error {
+	cid := r.PathValue("id")
+	if cid == "" {
+		return fmt.Errorf("chat ID is required")
+	}
+
+	if err := s.Store.PurgeChat(cid); err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("chat not found")
+		}
+		return fmt.Errorf("failed to purge chat: %w", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// deleteChat soft-deletes: the chat moves to "Recently Deleted" for 30 days.
+// Idempotent: repeated DELETE calls do not reset the 30-day grace timer.
 func (s *Server) deleteChat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	if cid == "" {
@@ -1309,7 +1419,7 @@ func (s *Server) deleteChat(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check if the chat exists (no need to load attachments)
-	_, err := s.Store.ChatWithOptions(cid, false)
+	chat, err := s.Store.ChatWithOptions(cid, false)
 	if err != nil {
 		if errors.Is(err, not.Found) {
 			w.WriteHeader(http.StatusNotFound)
@@ -1318,7 +1428,14 @@ func (s *Server) deleteChat(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("failed to get chat: %w", err)
 	}
 
-	// Delete the chat
+	// Already in trash: idempotent success without resetting the timestamp
+	// (otherwise repeated DELETE calls would extend the 30-day grace forever).
+	if chat.DeletedAt != nil {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+
+	// Soft-delete: chat moves to the recently-deleted list for 30 days.
 	if err := s.Store.DeleteChat(cid); err != nil {
 		return fmt.Errorf("failed to delete chat: %w", err)
 	}
@@ -1403,6 +1520,8 @@ func chatInfoFromChat(chat store.Chat) responses.ChatInfo {
 		UserExcerpt: userExcerpt,
 		CreatedAt:   chat.CreatedAt,
 		UpdatedAt:   updatedAt,
+		ArchivedAt:  chat.ArchivedAt,
+		DeletedAt:   chat.DeletedAt,
 	}
 }
 
@@ -1610,12 +1729,12 @@ func isImageAttachment(filename string) bool {
 // ptr is a convenience function for &literal
 func ptr[T any](v T) *T { return &v }
 
-// Browser tools simulate a full browser environment, allowing for actions like searching, opening, and interacting with web pages (e.g., "browser_search", "browser_open", "browser_find"). Currently only gpt-oss models support browser tools.
+// Browser tools simulate a full browser environment
 func supportsBrowserTools(model string) bool {
 	return strings.HasPrefix(strings.ToLower(model), "gpt-oss")
 }
 
-// Web search tools are simpler, providing only basic web search and fetch capabilities (e.g., "web_search", "web_fetch") without simulating a browser. Currently only qwen3 and deepseek-v3 support web search tools.
+// Web search tools are simpler, providing only basic web search and fetch capabilities
 func supportsWebSearchTools(model string) bool {
 	model = strings.ToLower(model)
 	prefixes := []string{"qwen3", "deepseek-v3"}
@@ -1684,7 +1803,6 @@ func (s *Server) buildChatRequest(chat *store.Chat, model string, think any, ava
 		case "user", "system":
 			// User and system messages are handled normally
 		default:
-			// Log unknown roles but still include them
 			s.log().Debug("unknown message role", "role", m.Role)
 		}
 

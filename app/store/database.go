@@ -10,11 +10,12 @@ import (
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/topseeder1/allpaca/app/types/not"
 )
 
 // currentSchemaVersion defines the current database schema version.
 // Increment this when making schema changes that require migrations.
-const currentSchemaVersion = 12
+const currentSchemaVersion = 14
 
 // database wraps the SQLite connection.
 // SQLite handles its own locking for concurrent access:
@@ -27,13 +28,11 @@ type database struct {
 }
 
 func newDatabase(dbPath string) (*database, error) {
-	// Open database connection
 	conn, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Test the connection
 	if err := conn.Ping(); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
@@ -41,7 +40,6 @@ func newDatabase(dbPath string) (*database, error) {
 
 	db := &database{conn: conn}
 
-	// Initialize schema
 	if err := db.init(); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("initialize database: %w", err)
@@ -52,7 +50,6 @@ func newDatabase(dbPath string) (*database, error) {
 
 func (db *database) Close() error {
 	_, _ = db.conn.Exec("PRAGMA wal_checkpoint(TRUNCATE);")
-
 	return db.conn.Close()
 }
 
@@ -88,13 +85,14 @@ func (db *database) init() error {
 		schema_version INTEGER NOT NULL DEFAULT %d
 	);
 
-	-- Insert default settings row if it doesn't exist
 	INSERT OR IGNORE INTO settings (id) VALUES (1);
 
 	CREATE TABLE IF NOT EXISTS chats (
 		id TEXT PRIMARY KEY,
 		title TEXT NOT NULL DEFAULT '',
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		archived_at TIMESTAMP,
+		deleted_at TIMESTAMP,
 		browser_state TEXT
 	);
 
@@ -148,18 +146,14 @@ func (db *database) init() error {
 	);
 	`, currentSchemaVersion)
 
-	_, err := db.conn.Exec(schema)
-	if err != nil {
+	if _, err := db.conn.Exec(schema); err != nil {
 		return err
 	}
 
-	// Check and upgrade schema version if needed
 	if err := db.migrate(); err != nil {
 		return fmt.Errorf("migrate schema: %w", err)
 	}
 
-	// Clean up orphaned records created before foreign key constraints were properly enforced
-	// TODO: Can eventually be removed - cleans up data from foreign key bug (ollama/ollama#11785, ollama/app#476)
 	if err := db.cleanupOrphanedData(); err != nil {
 		return fmt.Errorf("cleanup orphaned data: %w", err)
 	}
@@ -167,86 +161,80 @@ func (db *database) init() error {
 	return nil
 }
 
-// migrate handles database schema migrations
 func (db *database) migrate() error {
-	// Get current schema version
 	version, err := db.getSchemaVersion()
 	if err != nil {
 		return fmt.Errorf("get schema version after migration attempt: %w", err)
 	}
 
-	// Run migrations for each version
 	for version < currentSchemaVersion {
 		switch version {
 		case 1:
-			// Migrate from version 1 to 2: add context_length column
 			if err := db.migrateV1ToV2(); err != nil {
 				return fmt.Errorf("migrate v1 to v2: %w", err)
 			}
 			version = 2
 		case 2:
-			// Migrate from version 2 to 3: create attachments table
 			if err := db.migrateV2ToV3(); err != nil {
 				return fmt.Errorf("migrate v2 to v3: %w", err)
 			}
 			version = 3
 		case 3:
-			// Migrate from version 3 to 4: add tool_result column to messages table
 			if err := db.migrateV3ToV4(); err != nil {
 				return fmt.Errorf("migrate v3 to v4: %w", err)
 			}
 			version = 4
 		case 4:
-			// add airplane_mode column to settings table
 			if err := db.migrateV4ToV5(); err != nil {
 				return fmt.Errorf("migrate v4 to v5: %w", err)
 			}
 			version = 5
 		case 5:
-			// add turbo_enabled column to settings table
 			if err := db.migrateV5ToV6(); err != nil {
 				return fmt.Errorf("migrate v5 to v6: %w", err)
 			}
 			version = 6
 		case 6:
-			// add missing index for attachments table
 			if err := db.migrateV6ToV7(); err != nil {
 				return fmt.Errorf("migrate v6 to v7: %w", err)
 			}
 			version = 7
 		case 7:
-			// add think_enabled and think_level columns to settings table
 			if err := db.migrateV7ToV8(); err != nil {
 				return fmt.Errorf("migrate v7 to v8: %w", err)
 			}
 			version = 8
 		case 8:
-			// add browser_state column to chats table
 			if err := db.migrateV8ToV9(); err != nil {
 				return fmt.Errorf("migrate v8 to v9: %w", err)
 			}
 			version = 9
 		case 9:
-			// add cached user table
 			if err := db.migrateV9ToV10(); err != nil {
 				return fmt.Errorf("migrate v9 to v10: %w", err)
 			}
 			version = 10
 		case 10:
-			// remove remote column from settings table
 			if err := db.migrateV10ToV11(); err != nil {
 				return fmt.Errorf("migrate v10 to v11: %w", err)
 			}
 			version = 11
 		case 11:
-			// bring back remote column for backwards compatibility (deprecated)
 			if err := db.migrateV11ToV12(); err != nil {
 				return fmt.Errorf("migrate v11 to v12: %w", err)
 			}
 			version = 12
+		case 12:
+			if err := db.migrateV12ToV13(); err != nil {
+				return fmt.Errorf("migrate v12 to v13: %w", err)
+			}
+			version = 13
+		case 13:
+			if err := db.migrateV13ToV14(); err != nil {
+				return fmt.Errorf("migrate v13 to v14: %w", err)
+			}
+			version = 14
 		default:
-			// If we have a version we don't recognize, just set it to current
-			// This might happen during development
 			version = currentSchemaVersion
 		}
 	}
@@ -254,18 +242,15 @@ func (db *database) migrate() error {
 	return nil
 }
 
-// migrateV1ToV2 adds the context_length column to the settings table
 func (db *database) migrateV1ToV2() error {
 	_, err := db.conn.Exec(`ALTER TABLE settings ADD COLUMN context_length INTEGER NOT NULL DEFAULT 4096;`)
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add context_length column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`ALTER TABLE settings ADD COLUMN survey BOOLEAN NOT NULL DEFAULT TRUE;`)
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add survey column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 2;`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
@@ -273,7 +258,6 @@ func (db *database) migrateV1ToV2() error {
 	return nil
 }
 
-// migrateV2ToV3 creates the attachments table
 func (db *database) migrateV2ToV3() error {
 	_, err := db.conn.Exec(`
 		CREATE TABLE IF NOT EXISTS attachments (
@@ -287,12 +271,10 @@ func (db *database) migrateV2ToV3() error {
 	if err != nil {
 		return fmt.Errorf("create attachments table: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 3`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
@@ -301,110 +283,83 @@ func (db *database) migrateV3ToV4() error {
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add tool_result column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 4;`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV4ToV5 adds the airplane_mode column to the settings table
 func (db *database) migrateV4ToV5() error {
 	_, err := db.conn.Exec(`ALTER TABLE settings ADD COLUMN airplane_mode BOOLEAN NOT NULL DEFAULT 0;`)
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add airplane_mode column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 5;`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV5ToV6 adds the turbo_enabled, websearch_enabled, selected_model, sidebar_open columns to the settings table
 func (db *database) migrateV5ToV6() error {
-	_, err := db.conn.Exec(`ALTER TABLE settings ADD COLUMN turbo_enabled BOOLEAN NOT NULL DEFAULT 0;`)
-	if err != nil && !duplicateColumnError(err) {
-		return fmt.Errorf("add turbo_enabled column: %w", err)
+	cols := []string{
+		`ALTER TABLE settings ADD COLUMN turbo_enabled BOOLEAN NOT NULL DEFAULT 0;`,
+		`ALTER TABLE settings ADD COLUMN websearch_enabled BOOLEAN NOT NULL DEFAULT 0;`,
+		`ALTER TABLE settings ADD COLUMN selected_model TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE settings ADD COLUMN sidebar_open BOOLEAN NOT NULL DEFAULT 0;`,
 	}
-
-	_, err = db.conn.Exec(`ALTER TABLE settings ADD COLUMN websearch_enabled BOOLEAN NOT NULL DEFAULT 0;`)
-	if err != nil && !duplicateColumnError(err) {
-		return fmt.Errorf("add websearch_enabled column: %w", err)
+	for _, c := range cols {
+		if _, err := db.conn.Exec(c); err != nil && !duplicateColumnError(err) {
+			return fmt.Errorf("add column: %w", err)
+		}
 	}
-
-	_, err = db.conn.Exec(`ALTER TABLE settings ADD COLUMN selected_model TEXT NOT NULL DEFAULT '';`)
-	if err != nil && !duplicateColumnError(err) {
-		return fmt.Errorf("add selected_model column: %w", err)
-	}
-
-	_, err = db.conn.Exec(`ALTER TABLE settings ADD COLUMN sidebar_open BOOLEAN NOT NULL DEFAULT 0;`)
-	if err != nil && !duplicateColumnError(err) {
-		return fmt.Errorf("add sidebar_open column: %w", err)
-	}
-
-	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 6;`)
+	_, err := db.conn.Exec(`UPDATE settings SET schema_version = 6;`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV6ToV7 adds the missing index for the attachments table
 func (db *database) migrateV6ToV7() error {
 	_, err := db.conn.Exec(`CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON attachments(message_id);`)
 	if err != nil {
 		return fmt.Errorf("create attachments index: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 7;`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV7ToV8 adds the think_enabled and think_level columns to the settings table
 func (db *database) migrateV7ToV8() error {
 	_, err := db.conn.Exec(`ALTER TABLE settings ADD COLUMN think_enabled BOOLEAN NOT NULL DEFAULT 0;`)
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add think_enabled column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`ALTER TABLE settings ADD COLUMN think_level TEXT NOT NULL DEFAULT '';`)
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add think_level column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 8;`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV8ToV9 adds browser_state to chats and bumps schema
 func (db *database) migrateV8ToV9() error {
 	_, err := db.conn.Exec(`
 		ALTER TABLE chats ADD COLUMN browser_state TEXT;
 		UPDATE settings SET schema_version = 9;
 	`)
-
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add browser_state column: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV9ToV10 adds users table
 func (db *database) migrateV9ToV10() error {
 	_, err := db.conn.Exec(`
 		CREATE TABLE IF NOT EXISTS users (
@@ -418,41 +373,61 @@ func (db *database) migrateV9ToV10() error {
 	if err != nil {
 		return fmt.Errorf("create users table: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV10ToV11 removes the remote column from the settings table
 func (db *database) migrateV10ToV11() error {
 	_, err := db.conn.Exec(`ALTER TABLE settings DROP COLUMN remote`)
 	if err != nil && !columnNotExists(err) {
 		return fmt.Errorf("drop remote column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 11`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// migrateV11ToV12 brings back the remote column for backwards compatibility (deprecated)
 func (db *database) migrateV11ToV12() error {
 	_, err := db.conn.Exec(`ALTER TABLE settings ADD COLUMN remote TEXT NOT NULL DEFAULT ''`)
 	if err != nil && !duplicateColumnError(err) {
 		return fmt.Errorf("add remote column: %w", err)
 	}
-
 	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 12`)
 	if err != nil {
 		return fmt.Errorf("update schema version: %w", err)
 	}
-
 	return nil
 }
 
-// cleanupOrphanedData removes orphaned records that may exist due to the foreign key bug
+// migrateV12ToV13 adds archived_at to chats. NULL means "not archived".
+func (db *database) migrateV12ToV13() error {
+	_, err := db.conn.Exec(`ALTER TABLE chats ADD COLUMN archived_at TIMESTAMP`)
+	if err != nil && !duplicateColumnError(err) {
+		return fmt.Errorf("add archived_at column: %w", err)
+	}
+	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 13`)
+	if err != nil {
+		return fmt.Errorf("update schema version: %w", err)
+	}
+	return nil
+}
+
+// migrateV13ToV14 adds deleted_at to chats. NULL means "not deleted".
+// Deliberately not in saveChat's UPSERT column list, so writes cannot
+// accidentally clear a soft-delete.
+func (db *database) migrateV13ToV14() error {
+	_, err := db.conn.Exec(`ALTER TABLE chats ADD COLUMN deleted_at TIMESTAMP`)
+	if err != nil && !duplicateColumnError(err) {
+		return fmt.Errorf("add deleted_at column: %w", err)
+	}
+	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 14`)
+	if err != nil {
+		return fmt.Errorf("update schema version: %w", err)
+	}
+	return nil
+}
+
 func (db *database) cleanupOrphanedData() error {
 	_, err := db.conn.Exec(`
 		DELETE FROM tool_calls
@@ -497,13 +472,17 @@ func columnNotExists(err error) bool {
 	return false
 }
 
-func (db *database) getAllChats() ([]Chat, error) {
-	// Query chats with their first user message and latest update time
-	query := `
+// queryChats is the single source of truth for the chat list projection used
+// by the active list, the archive, and the trash. `where` and `orderBy` are
+// compile-time constants supplied by the callers below, never user input.
+func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
+	query := fmt.Sprintf(`
 		SELECT 
 			c.id, 
 			c.title, 
 			c.created_at,
+			c.archived_at,
+			c.deleted_at,
 			COALESCE(first_msg.content, '') as first_user_content,
 			COALESCE(datetime(MAX(m.updated_at)), datetime(c.created_at)) as last_updated
 		FROM chats c
@@ -514,9 +493,10 @@ func (db *database) getAllChats() ([]Chat, error) {
 			GROUP BY chat_id
 		) first_msg ON c.id = first_msg.chat_id
 		LEFT JOIN messages m ON c.id = m.chat_id
-		GROUP BY c.id, c.title, c.created_at, first_msg.content
-		ORDER BY last_updated DESC
-	`
+		WHERE %s
+		GROUP BY c.id, c.title, c.created_at, c.archived_at, c.deleted_at, first_msg.content
+		ORDER BY %s
+	`, where, orderBy)
 
 	rows, err := db.conn.Query(query)
 	if err != nil {
@@ -528,6 +508,7 @@ func (db *database) getAllChats() ([]Chat, error) {
 	for rows.Next() {
 		var chat Chat
 		var createdAt time.Time
+		var archivedAt, deletedAt sql.NullTime
 		var firstUserContent string
 		var lastUpdatedStr string
 
@@ -535,20 +516,25 @@ func (db *database) getAllChats() ([]Chat, error) {
 			&chat.ID,
 			&chat.Title,
 			&createdAt,
+			&archivedAt,
+			&deletedAt,
 			&firstUserContent,
 			&lastUpdatedStr,
 		)
-
-		// Parse the last updated time
-		lastUpdated, _ := time.Parse("2006-01-02 15:04:05", lastUpdatedStr)
 		if err != nil {
 			return nil, fmt.Errorf("scan chat: %w", err)
 		}
 
 		chat.CreatedAt = createdAt
+		if archivedAt.Valid {
+			chat.ArchivedAt = &archivedAt.Time
+		}
+		if deletedAt.Valid {
+			chat.DeletedAt = &deletedAt.Time
+		}
 
-		// Add a dummy first user message for the UI to display
-		// This is just for the excerpt, full messages are loaded when needed
+		lastUpdated, _ := time.Parse("2006-01-02 15:04:05", lastUpdatedStr)
+
 		chat.Messages = []Message{}
 		if firstUserContent != "" {
 			chat.Messages = append(chat.Messages, Message{
@@ -568,9 +554,29 @@ func (db *database) getAllChats() ([]Chat, error) {
 	return chats, nil
 }
 
+// getAllChats returns every chat that is neither archived nor deleted.
+func (db *database) getAllChats() ([]Chat, error) {
+	return db.queryChats("c.archived_at IS NULL AND c.deleted_at IS NULL", "last_updated DESC")
+}
+
+// getArchivedChats returns archived chats that are not deleted,
+// most recently archived first.
+func (db *database) getArchivedChats() ([]Chat, error) {
+	return db.queryChats("c.archived_at IS NOT NULL AND c.deleted_at IS NULL", "c.archived_at DESC")
+}
+
+// getDeletedChats returns soft-deleted chats still within the grace window,
+// most recently deleted first.
+func (db *database) getDeletedChats() ([]Chat, error) {
+	return db.queryChats("c.deleted_at IS NOT NULL", "c.deleted_at DESC")
+}
+
+// getChatWithOptions loads a single chat by ID. Deliberately unfiltered — a
+// soft-deleted chat must still be loadable so chat() can see DeletedAt and
+// auto-restore when the user replies.
 func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Chat, error) {
 	query := `
-		SELECT id, title, created_at, browser_state
+		SELECT id, title, created_at, browser_state, archived_at, deleted_at
 		FROM chats
 		WHERE id = ?
 	`
@@ -578,12 +584,15 @@ func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Cha
 	var chat Chat
 	var createdAt time.Time
 	var browserState sql.NullString
+	var archivedAt, deletedAt sql.NullTime
 
 	err := db.conn.QueryRow(query, id).Scan(
 		&chat.ID,
 		&chat.Title,
 		&createdAt,
 		&browserState,
+		&archivedAt,
+		&deletedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -593,6 +602,12 @@ func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Cha
 	}
 
 	chat.CreatedAt = createdAt
+	if archivedAt.Valid {
+		chat.ArchivedAt = &archivedAt.Time
+	}
+	if deletedAt.Valid {
+		chat.DeletedAt = &deletedAt.Time
+	}
 	if browserState.Valid && browserState.String != "" {
 		var raw json.RawMessage
 		if err := json.Unmarshal([]byte(browserState.String), &raw); err == nil {
@@ -616,11 +631,10 @@ func (db *database) saveChat(chat Chat) error {
 	}
 	defer tx.Rollback()
 
-	// Use COALESCE for browser_state to avoid wiping an existing
-	// chat-level browser_state when saving a chat that doesn't include a new state payload.
-	// Many code paths call SetChat to update metadata/messages only; without COALESCE the
-	// UPSERT would overwrite browser_state with NULL, breaking revisit rendering that relies
-	// on the last persisted full tool state.
+	// COALESCE for browser_state preserves the existing payload when saving a
+	// chat that doesn't include a new state. archived_at and deleted_at are
+	// intentionally absent — they're owned by archiveChat/softDeleteChat so
+	// that write paths cannot clobber trash or archive status.
 	query := `
 		INSERT INTO chats (id, title, created_at, browser_state)
 		VALUES (?, ?, ?, ?)
@@ -634,33 +648,22 @@ func (db *database) saveChat(chat Chat) error {
 		browserState = sql.NullString{String: string(chat.BrowserState), Valid: true}
 	}
 
-	_, err = tx.Exec(query,
-		chat.ID,
-		chat.Title,
-		chat.CreatedAt,
-		browserState,
-	)
-	if err != nil {
+	if _, err = tx.Exec(query, chat.ID, chat.Title, chat.CreatedAt, browserState); err != nil {
 		return fmt.Errorf("save chat: %w", err)
 	}
 
-	// Delete existing messages (we'll re-insert all)
-	_, err = tx.Exec("DELETE FROM messages WHERE chat_id = ?", chat.ID)
-	if err != nil {
+	if _, err = tx.Exec("DELETE FROM messages WHERE chat_id = ?", chat.ID); err != nil {
 		return fmt.Errorf("delete messages: %w", err)
 	}
 
-	// Insert messages
 	for _, msg := range chat.Messages {
 		messageID, err := db.insertMessage(tx, chat.ID, msg)
 		if err != nil {
 			return fmt.Errorf("insert message: %w", err)
 		}
 
-		// Insert tool calls if any
 		for _, toolCall := range msg.ToolCalls {
-			err := db.insertToolCall(tx, messageID, toolCall)
-			if err != nil {
+			if err := db.insertToolCall(tx, messageID, toolCall); err != nil {
 				return fmt.Errorf("insert tool call: %w", err)
 			}
 		}
@@ -669,7 +672,6 @@ func (db *database) saveChat(chat Chat) error {
 	return tx.Commit()
 }
 
-// updateChatBrowserState updates only the browser_state for a chat
 func (db *database) updateChatBrowserState(chatID string, state json.RawMessage) error {
 	_, err := db.conn.Exec(`UPDATE chats SET browser_state = ? WHERE id = ?`, string(state), chatID)
 	if err != nil {
@@ -678,14 +680,138 @@ func (db *database) updateChatBrowserState(chatID string, state json.RawMessage)
 	return nil
 }
 
-func (db *database) deleteChat(id string) error {
-	_, err := db.conn.Exec("DELETE FROM chats WHERE id = ?", id)
+// softDeleteChat moves a chat into the trash for 30 days.
+func (db *database) softDeleteChat(id string) error {
+	result, err := db.conn.Exec(
+		`UPDATE chats SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`, id)
 	if err != nil {
-		return fmt.Errorf("delete chat: %w", err)
+		return fmt.Errorf("soft delete chat: %w", err)
+	}
+	// Already-deleted is a no-op, not an error.
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		// Confirm the row exists at all.
+		var exists int
+		if err := db.conn.QueryRow(`SELECT COUNT(1) FROM chats WHERE id = ?`, id).Scan(&exists); err != nil {
+			return fmt.Errorf("check chat exists: %w", err)
+		}
+		if exists == 0 {
+			return fmt.Errorf("%w: chat %s", not.Found, id)
+		}
+	}
+	return nil
+}
+
+// restoreChat clears deleted_at, bringing a trashed chat back. Preserves
+// archived_at, so a deleted-from-archive chat returns to the archive.
+func (db *database) restoreChat(id string) error {
+	result, err := db.conn.Exec(
+		`UPDATE chats SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL`, id)
+	if err != nil {
+		return fmt.Errorf("restore chat: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		var exists int
+		if err := db.conn.QueryRow(`SELECT COUNT(1) FROM chats WHERE id = ?`, id).Scan(&exists); err != nil {
+			return fmt.Errorf("check chat exists: %w", err)
+		}
+		if exists == 0 {
+			return fmt.Errorf("%w: chat %s", not.Found, id)
+		}
+		// Not in trash — idempotent success.
+	}
+	return nil
+}
+
+// purgeChat permanently removes a chat row. Cascade deletes messages, tool
+// calls, and attachments. Caller is responsible for image cleanup.
+func (db *database) purgeChat(id string) error {
+	result, err := db.conn.Exec(`DELETE FROM chats WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("purge chat: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: chat %s", not.Found, id)
+	}
+	_, _ = db.conn.Exec("PRAGMA wal_checkpoint(TRUNCATE);")
+	return nil
+}
+
+// purgeExpiredChats deletes every chat whose deleted_at is older than cutoff,
+// returning the removed IDs so callers can clean up image dirs.
+func (db *database) purgeExpiredChats(cutoff time.Duration) ([]string, error) {
+	rows, err := db.conn.Query(
+		`SELECT id FROM chats WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', ?)`,
+		fmt.Sprintf("-%d seconds", int(cutoff.Seconds())),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("select expired chats: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan expired chat: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate expired chats: %w", err)
 	}
 
-	_, _ = db.conn.Exec("PRAGMA wal_checkpoint(TRUNCATE);")
+	if len(ids) == 0 {
+		return nil, nil
+	}
 
+	if _, err := db.conn.Exec(
+		`DELETE FROM chats WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', ?)`,
+		fmt.Sprintf("-%d seconds", int(cutoff.Seconds())),
+	); err != nil {
+		return nil, fmt.Errorf("purge expired chats: %w", err)
+	}
+
+	return ids, nil
+}
+
+func (db *database) archiveChat(id string) error {
+	result, err := db.conn.Exec(
+		`UPDATE chats SET archived_at = CURRENT_TIMESTAMP WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("archive chat: %w", err)
+	}
+	return archiveRowsAffected(result, id)
+}
+
+func (db *database) unarchiveChat(id string) error {
+	result, err := db.conn.Exec(
+		`UPDATE chats SET archived_at = NULL WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("unarchive chat: %w", err)
+	}
+	return archiveRowsAffected(result, id)
+}
+
+func archiveRowsAffected(result sql.Result, id string) error {
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: chat %s", not.Found, id)
+	}
 	return nil
 }
 
@@ -696,11 +822,8 @@ func (db *database) updateLastMessage(chatID string, msg Message) error {
 	}
 	defer tx.Rollback()
 
-	// Get the ID of the last message
 	var messageID int64
-	err = tx.QueryRow(`
-		SELECT MAX(id) FROM messages WHERE chat_id = ?
-	`, chatID).Scan(&messageID)
+	err = tx.QueryRow(`SELECT MAX(id) FROM messages WHERE chat_id = ?`, chatID).Scan(&messageID)
 	if err != nil {
 		return fmt.Errorf("get last message id: %w", err)
 	}
@@ -734,45 +857,30 @@ func (db *database) updateLastMessage(chatID string, msg Message) error {
 	}
 
 	result, err := tx.Exec(query,
-		msg.Content,
-		msg.Thinking,
-		modelName,
-		msg.UpdatedAt,
-		thinkingTimeStart,
-		thinkingTimeEnd,
-		toolResultJSON,
-		messageID,
+		msg.Content, msg.Thinking, modelName, msg.UpdatedAt,
+		thinkingTimeStart, thinkingTimeEnd, toolResultJSON, messageID,
 	)
 	if err != nil {
 		return fmt.Errorf("update last message: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("get rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
+	if rows, _ := result.RowsAffected(); rows == 0 {
 		return fmt.Errorf("no message found to update")
 	}
 
-	_, err = tx.Exec("DELETE FROM attachments WHERE message_id = ?", messageID)
-	if err != nil {
+	if _, err = tx.Exec("DELETE FROM attachments WHERE message_id = ?", messageID); err != nil {
 		return fmt.Errorf("delete existing attachments: %w", err)
 	}
 	for _, att := range msg.Attachments {
-		err := db.insertAttachment(tx, messageID, att)
-		if err != nil {
+		if err := db.insertAttachment(tx, messageID, att); err != nil {
 			return fmt.Errorf("insert attachment: %w", err)
 		}
 	}
 
-	_, err = tx.Exec("DELETE FROM tool_calls WHERE message_id = ?", messageID)
-	if err != nil {
+	if _, err = tx.Exec("DELETE FROM tool_calls WHERE message_id = ?", messageID); err != nil {
 		return fmt.Errorf("delete existing tool calls: %w", err)
 	}
 	for _, toolCall := range msg.ToolCalls {
-		err := db.insertToolCall(tx, messageID, toolCall)
-		if err != nil {
+		if err := db.insertToolCall(tx, messageID, toolCall); err != nil {
 			return fmt.Errorf("insert tool call: %w", err)
 		}
 	}
@@ -792,10 +900,8 @@ func (db *database) appendMessage(chatID string, msg Message) error {
 		return fmt.Errorf("insert message: %w", err)
 	}
 
-	// Insert tool calls if any
 	for _, toolCall := range msg.ToolCalls {
-		err := db.insertToolCall(tx, messageID, toolCall)
-		if err != nil {
+		if err := db.insertToolCall(tx, messageID, toolCall); err != nil {
 			return fmt.Errorf("insert tool call: %w", err)
 		}
 	}
@@ -822,21 +928,12 @@ func (db *database) getMessages(chatID string, loadAttachmentData bool) ([]Messa
 		var msg Message
 		var messageID int64
 		var thinkingTimeStart, thinkingTimeEnd sql.NullTime
-		var modelName sql.NullString
-		var toolResult sql.NullString
+		var modelName, toolResult sql.NullString
 
 		err := rows.Scan(
-			&messageID,
-			&msg.Role,
-			&msg.Content,
-			&msg.Thinking,
-			&msg.Stream,
-			&modelName,
-			&msg.CreatedAt,
-			&msg.UpdatedAt,
-			&thinkingTimeStart,
-			&thinkingTimeEnd,
-			&toolResult,
+			&messageID, &msg.Role, &msg.Content, &msg.Thinking, &msg.Stream,
+			&modelName, &msg.CreatedAt, &msg.UpdatedAt,
+			&thinkingTimeStart, &thinkingTimeEnd, &toolResult,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
@@ -854,21 +951,16 @@ func (db *database) getMessages(chatID string, loadAttachmentData bool) ([]Messa
 		if thinkingTimeEnd.Valid {
 			msg.ThinkingTimeEnd = &thinkingTimeEnd.Time
 		}
-
-		// Parse tool result from JSON if present
 		if toolResult.Valid && toolResult.String != "" {
 			var result json.RawMessage
 			if err := json.Unmarshal([]byte(toolResult.String), &result); err == nil {
 				msg.ToolResult = &result
 			}
 		}
-
-		// Set model if present
 		if modelName.Valid && modelName.String != "" {
 			msg.Model = modelName.String
 		}
 
-		// Get tool calls for this message
 		toolCalls, err := db.getToolCalls(messageID)
 		if err != nil {
 			return nil, fmt.Errorf("get tool calls: %w", err)
@@ -914,17 +1006,9 @@ func (db *database) insertMessage(tx *sql.Tx, chatID string, msg Message) (int64
 	}
 
 	result, err := tx.Exec(query,
-		chatID,
-		msg.Role,
-		msg.Content,
-		msg.Thinking,
-		msg.Stream,
-		modelName,
-		msg.CreatedAt,
-		msg.UpdatedAt,
-		thinkingTimeStart,
-		thinkingTimeEnd,
-		toolResultJSON,
+		chatID, msg.Role, msg.Content, msg.Thinking, msg.Stream,
+		modelName, msg.CreatedAt, msg.UpdatedAt,
+		thinkingTimeStart, thinkingTimeEnd, toolResultJSON,
 	)
 	if err != nil {
 		return 0, err
@@ -936,8 +1020,7 @@ func (db *database) insertMessage(tx *sql.Tx, chatID string, msg Message) (int64
 	}
 
 	for _, att := range msg.Attachments {
-		err := db.insertAttachment(tx, messageID, att)
-		if err != nil {
+		if err := db.insertAttachment(tx, messageID, att); err != nil {
 			return 0, fmt.Errorf("insert attachment: %w", err)
 		}
 	}
@@ -948,19 +1031,9 @@ func (db *database) insertMessage(tx *sql.Tx, chatID string, msg Message) (int64
 func (db *database) getAttachments(messageID int64, loadData bool) ([]File, error) {
 	var query string
 	if loadData {
-		query = `
-			SELECT filename, data
-			FROM attachments
-			WHERE message_id = ?
-			ORDER BY id ASC
-		`
+		query = `SELECT filename, data FROM attachments WHERE message_id = ? ORDER BY id ASC`
 	} else {
-		query = `
-			SELECT filename, '' as data
-			FROM attachments
-			WHERE message_id = ?
-			ORDER BY id ASC
-		`
+		query = `SELECT filename, '' as data FROM attachments WHERE message_id = ? ORDER BY id ASC`
 	}
 
 	rows, err := db.conn.Query(query, messageID)
@@ -972,17 +1045,14 @@ func (db *database) getAttachments(messageID int64, loadData bool) ([]File, erro
 	var attachments []File
 	for rows.Next() {
 		var file File
-		err := rows.Scan(&file.Filename, &file.Data)
-		if err != nil {
+		if err := rows.Scan(&file.Filename, &file.Data); err != nil {
 			return nil, fmt.Errorf("scan attachment: %w", err)
 		}
 		attachments = append(attachments, file)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate attachments: %w", err)
 	}
-
 	return attachments, nil
 }
 
@@ -1005,18 +1075,11 @@ func (db *database) getToolCalls(messageID int64) ([]ToolCall, error) {
 		var tc ToolCall
 		var functionResult sql.NullString
 
-		err := rows.Scan(
-			&tc.Type,
-			&tc.Function.Name,
-			&tc.Function.Arguments,
-			&functionResult,
-		)
-		if err != nil {
+		if err := rows.Scan(&tc.Type, &tc.Function.Name, &tc.Function.Arguments, &functionResult); err != nil {
 			return nil, fmt.Errorf("scan tool call: %w", err)
 		}
 
 		if functionResult.Valid && functionResult.String != "" {
-			// Parse the JSON result
 			var result json.RawMessage
 			if err := json.Unmarshal([]byte(functionResult.String), &result); err == nil {
 				tc.Function.Result = &result
@@ -1025,32 +1088,21 @@ func (db *database) getToolCalls(messageID int64) ([]ToolCall, error) {
 
 		toolCalls = append(toolCalls, tc)
 	}
-
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate tool calls: %w", err)
 	}
-
 	return toolCalls, nil
 }
 
 func (db *database) insertAttachment(tx *sql.Tx, messageID int64, file File) error {
-	query := `
-		INSERT INTO attachments (message_id, filename, data)
-		VALUES (?, ?, ?)
-	`
-	_, err := tx.Exec(query, messageID, file.Filename, file.Data)
+	_, err := tx.Exec(`INSERT INTO attachments (message_id, filename, data) VALUES (?, ?, ?)`,
+		messageID, file.Filename, file.Data)
 	return err
 }
 
 func (db *database) insertToolCall(tx *sql.Tx, messageID int64, tc ToolCall) error {
-	query := `
-		INSERT INTO tool_calls (message_id, type, function_name, function_arguments, function_result)
-		VALUES (?, ?, ?, ?, ?)
-	`
-
 	var functionResult sql.NullString
 	if tc.Function.Result != nil {
-		// Convert result to JSON
 		resultJSON, err := json.Marshal(tc.Function.Result)
 		if err != nil {
 			return fmt.Errorf("marshal tool result: %w", err)
@@ -1058,30 +1110,22 @@ func (db *database) insertToolCall(tx *sql.Tx, messageID int64, tc ToolCall) err
 		functionResult = sql.NullString{String: string(resultJSON), Valid: true}
 	}
 
-	_, err := tx.Exec(query,
-		messageID,
-		tc.Type,
-		tc.Function.Name,
-		tc.Function.Arguments,
-		functionResult,
-	)
+	_, err := tx.Exec(`INSERT INTO tool_calls (message_id, type, function_name, function_arguments, function_result)
+		VALUES (?, ?, ?, ?, ?)`,
+		messageID, tc.Type, tc.Function.Name, tc.Function.Arguments, functionResult)
 	return err
 }
 
-// Settings operations
-
 func (db *database) getID() (string, error) {
 	var id string
-	err := db.conn.QueryRow("SELECT device_id FROM settings").Scan(&id)
-	if err != nil {
+	if err := db.conn.QueryRow("SELECT device_id FROM settings").Scan(&id); err != nil {
 		return "", fmt.Errorf("get device id: %w", err)
 	}
 	return id, nil
 }
 
 func (db *database) setID(id string) error {
-	_, err := db.conn.Exec("UPDATE settings SET device_id = ?", id)
-	if err != nil {
+	if _, err := db.conn.Exec("UPDATE settings SET device_id = ?", id); err != nil {
 		return fmt.Errorf("set device id: %w", err)
 	}
 	return nil
@@ -1089,16 +1133,14 @@ func (db *database) setID(id string) error {
 
 func (db *database) getHasCompletedFirstRun() (bool, error) {
 	var hasCompletedFirstRun bool
-	err := db.conn.QueryRow("SELECT has_completed_first_run FROM settings").Scan(&hasCompletedFirstRun)
-	if err != nil {
+	if err := db.conn.QueryRow("SELECT has_completed_first_run FROM settings").Scan(&hasCompletedFirstRun); err != nil {
 		return false, fmt.Errorf("get has completed first run: %w", err)
 	}
 	return hasCompletedFirstRun, nil
 }
 
 func (db *database) setHasCompletedFirstRun(hasCompletedFirstRun bool) error {
-	_, err := db.conn.Exec("UPDATE settings SET has_completed_first_run = ?", hasCompletedFirstRun)
-	if err != nil {
+	if _, err := db.conn.Exec("UPDATE settings SET has_completed_first_run = ?", hasCompletedFirstRun); err != nil {
 		return fmt.Errorf("set has completed first run: %w", err)
 	}
 	return nil
@@ -1106,7 +1148,6 @@ func (db *database) setHasCompletedFirstRun(hasCompletedFirstRun bool) error {
 
 func (db *database) getSettings() (Settings, error) {
 	var s Settings
-
 	err := db.conn.QueryRow(`
 		SELECT expose, survey, browser, models, agent, tools, working_dir, context_length, airplane_mode, turbo_enabled, websearch_enabled, selected_model, sidebar_open, think_enabled, think_level 
 		FROM settings
@@ -1114,7 +1155,6 @@ func (db *database) getSettings() (Settings, error) {
 	if err != nil {
 		return Settings{}, fmt.Errorf("get settings: %w", err)
 	}
-
 	return s, nil
 }
 
@@ -1131,16 +1171,14 @@ func (db *database) setSettings(s Settings) error {
 
 func (db *database) getWindowSize() (int, int, error) {
 	var width, height int
-	err := db.conn.QueryRow("SELECT window_width, window_height FROM settings").Scan(&width, &height)
-	if err != nil {
+	if err := db.conn.QueryRow("SELECT window_width, window_height FROM settings").Scan(&width, &height); err != nil {
 		return 0, 0, fmt.Errorf("get window size: %w", err)
 	}
 	return width, height, nil
 }
 
 func (db *database) setWindowSize(width, height int) error {
-	_, err := db.conn.Exec("UPDATE settings SET window_width = ?, window_height = ?", width, height)
-	if err != nil {
+	if _, err := db.conn.Exec("UPDATE settings SET window_width = ?, window_height = ?", width, height); err != nil {
 		return fmt.Errorf("set window size: %w", err)
 	}
 	return nil
@@ -1148,16 +1186,14 @@ func (db *database) setWindowSize(width, height int) error {
 
 func (db *database) isConfigMigrated() (bool, error) {
 	var migrated bool
-	err := db.conn.QueryRow("SELECT config_migrated FROM settings").Scan(&migrated)
-	if err != nil {
+	if err := db.conn.QueryRow("SELECT config_migrated FROM settings").Scan(&migrated); err != nil {
 		return false, fmt.Errorf("get config migrated: %w", err)
 	}
 	return migrated, nil
 }
 
 func (db *database) setConfigMigrated(migrated bool) error {
-	_, err := db.conn.Exec("UPDATE settings SET config_migrated = ?", migrated)
-	if err != nil {
+	if _, err := db.conn.Exec("UPDATE settings SET config_migrated = ?", migrated); err != nil {
 		return fmt.Errorf("set config migrated: %w", err)
 	}
 	return nil
@@ -1165,16 +1201,14 @@ func (db *database) setConfigMigrated(migrated bool) error {
 
 func (db *database) getSchemaVersion() (int, error) {
 	var version int
-	err := db.conn.QueryRow("SELECT schema_version FROM settings").Scan(&version)
-	if err != nil {
+	if err := db.conn.QueryRow("SELECT schema_version FROM settings").Scan(&version); err != nil {
 		return 0, fmt.Errorf("get schema version: %w", err)
 	}
 	return version, nil
 }
 
 func (db *database) setSchemaVersion(version int) error {
-	_, err := db.conn.Exec("UPDATE settings SET schema_version = ?", version)
-	if err != nil {
+	if _, err := db.conn.Exec("UPDATE settings SET schema_version = ?", version); err != nil {
 		return fmt.Errorf("set schema version: %w", err)
 	}
 	return nil
@@ -1189,11 +1223,10 @@ func (db *database) getUser() (*User, error) {
 	`).Scan(&user.Name, &user.Email, &user.Plan, &user.CachedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // No user cached yet
+			return nil, nil
 		}
 		return nil, fmt.Errorf("get user: %w", err)
 	}
-
 	return &user, nil
 }
 
@@ -1201,7 +1234,6 @@ func (db *database) setUser(user User) error {
 	if err := db.clearUser(); err != nil {
 		return fmt.Errorf("before set: %w", err)
 	}
-
 	_, err := db.conn.Exec(`
 		INSERT INTO users (name, email, plan, cached_at)
 		VALUES (?, ?, ?, ?)
@@ -1209,13 +1241,11 @@ func (db *database) setUser(user User) error {
 	if err != nil {
 		return fmt.Errorf("set user: %w", err)
 	}
-
 	return nil
 }
 
 func (db *database) clearUser() error {
-	_, err := db.conn.Exec("DELETE FROM users")
-	if err != nil {
+	if _, err := db.conn.Exec("DELETE FROM users"); err != nil {
 		return fmt.Errorf("clear user: %w", err)
 	}
 	return nil
