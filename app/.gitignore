@@ -1,4 +1,4 @@
-ollama.syso
+*.syso
 *.crt
 *.exe
 /app/app
