@@ -11,6 +11,9 @@ import {
   ChatRequest,
   Settings,
   User,
+  Project,
+  ProjectsResponse,
+  ProjectStats,
 } from "@/gotypes";
 import { parseJsonlFromResponse } from "./util/jsonl-parsing";
 import { ollamaClient as ollama } from "./lib/ollama-client";
@@ -86,16 +89,28 @@ export async function disconnectUser(): Promise<void> {
   }
 }
 
-export async function getChats(): Promise<ChatsResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/chats`);
+// getChats returns the unfiled (root) chat list, or a specific project's chat
+// list when projectId is provided.
+export async function getChats(
+  projectId?: string | null,
+): Promise<ChatsResponse> {
+  const params = projectId ? `?project=${encodeURIComponent(projectId)}` : "";
+  const response = await fetch(`${API_BASE}/api/v1/chats${params}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch chats: ${response.status}`);
+  }
   const data = await response.json();
   return new ChatsResponse(data);
 }
 
 // getArchivedChats returns only chats with archivedAt set that are not
-// deleted. Sorted newest-archived-first by the server.
+// deleted. Sorted newest-archived-first by the server. Archive is a global
+// view — no project filter.
 export async function getArchivedChats(): Promise<ChatsResponse> {
   const response = await fetch(`${API_BASE}/api/v1/chats/archived`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch archived chats: ${response.status}`);
+  }
   const data = await response.json();
   return new ChatsResponse(data);
 }
@@ -104,15 +119,100 @@ export async function getArchivedChats(): Promise<ChatsResponse> {
 // window. Once purged server-side or after 30 days, they disappear here.
 export async function getDeletedChats(): Promise<ChatsResponse> {
   const response = await fetch(`${API_BASE}/api/v1/chats/deleted`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch deleted chats: ${response.status}`);
+  }
   const data = await response.json();
   return new ChatsResponse(data);
 }
 
 export async function getChat(chatId: string): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch chat: ${response.status}`);
+  }
   const data = await response.json();
   return new ChatResponse(data);
 }
+
+// ---------- Projects ----------
+
+export async function getProjects(): Promise<ProjectsResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/projects`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch projects: ${response.status}`);
+  }
+  const data = await response.json();
+  return new ProjectsResponse(data);
+}
+
+export async function createProject(
+  name: string,
+  parentId?: string | null,
+): Promise<Project> {
+  const response = await fetch(`${API_BASE}/api/v1/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, parentId: parentId ?? null }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to create project: ${response.status}`);
+  }
+  const data = await response.json();
+  return new Project(data);
+}
+
+export async function renameProject(
+  id: string,
+  name: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/project/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to rename project: ${response.status}`);
+  }
+}
+
+export async function deleteProject(
+  id: string,
+  mode: "promote" | "delete",
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE}/api/v1/project/${id}?mode=${encodeURIComponent(mode)}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to delete project: ${response.status}`);
+  }
+}
+
+export async function moveChatToProject(
+  chatId: string,
+  projectId: string | null,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/project`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to move chat: ${response.status}`);
+  }
+}
+
+export async function getProjectStats(id: string): Promise<ProjectStats> {
+  const response = await fetch(`${API_BASE}/api/v1/project/${id}/stats`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch project stats: ${response.status}`);
+  }
+  const data = await response.json();
+  return new ProjectStats(data);
+}
+
+// ---------- Models ----------
 
 export async function getModels(query?: string): Promise<Model[]> {
   try {
@@ -198,6 +298,7 @@ export async function* sendMessage(
   fileTools?: boolean,
   forceUpdate?: boolean,
   think?: boolean | string,
+  projectId?: string | null,
 ): AsyncGenerator<ChatEventUnion> {
   const serializedAttachments = attachments?.map((att) => ({
     filename: att.filename,
@@ -223,6 +324,7 @@ export async function* sendMessage(
         file_tools: fileTools ?? false,
         ...(forceUpdate !== undefined ? { forceUpdate } : {}),
         ...(shouldSendThink ? { think } : {}),
+        ...(projectId ? { projectId } : {}),
       }),
     ),
     signal,
@@ -280,8 +382,6 @@ export async function renameChat(chatId: string, title: string): Promise<void> {
   }
 }
 
-// deleteChat soft-deletes: the chat moves to Recently Deleted for 30 days.
-// No-op if the chat is already in the trash (server returns 200).
 export async function deleteChat(chatId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}`, {
     method: "DELETE",
@@ -292,7 +392,6 @@ export async function deleteChat(chatId: string): Promise<void> {
   }
 }
 
-// archiveChat hides the chat from the active list without touching its rows.
 export async function archiveChat(chatId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/archive`, {
     method: "POST",
@@ -303,7 +402,6 @@ export async function archiveChat(chatId: string): Promise<void> {
   }
 }
 
-// unarchiveChat returns the chat to the active list.
 export async function unarchiveChat(chatId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/unarchive`, {
     method: "POST",
@@ -314,7 +412,6 @@ export async function unarchiveChat(chatId: string): Promise<void> {
   }
 }
 
-// restoreChat brings a soft-deleted chat back. Preserves archived_at.
 export async function restoreChat(chatId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/restore`, {
     method: "POST",
@@ -325,7 +422,6 @@ export async function restoreChat(chatId: string): Promise<void> {
   }
 }
 
-// purgeChat permanently removes a soft-deleted chat. Irreversible.
 export async function purgeChat(chatId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/api/v1/chat/${chatId}/purge`, {
     method: "DELETE",

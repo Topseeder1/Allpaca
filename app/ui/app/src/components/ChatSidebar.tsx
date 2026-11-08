@@ -4,6 +4,13 @@ import { useDeletedChats } from "@/hooks/useDeletedChats";
 import { useRenameChat } from "@/hooks/useRenameChat";
 import { useDeleteChat } from "@/hooks/useDeleteChat";
 import { useArchiveChat } from "@/hooks/useArchiveChat";
+import {
+  useCreateProject,
+  useDeleteProject,
+  useMoveChatToProject,
+  useProjects,
+  useRenameProject,
+} from "@/hooks/useProjects";
 import { useQueryClient } from "@tanstack/react-query";
 import { getChat, restoreChat, purgeChat } from "@/api";
 import { Link } from "@/components/ui/link";
@@ -19,14 +26,16 @@ import {
 import { UndoToast } from "@/components/UndoToast";
 import { ChatActionsMenu } from "@/components/ChatActionsMenu";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
+import { ProjectsPanel } from "@/components/ProjectsPanel";
+import { ProjectBreadcrumb } from "@/components/ProjectBreadcrumb";
+import { NewProjectDialog } from "@/components/NewProjectDialog";
+import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 
-// there's a hidden debug feature to copy a chat's data to the clipboard by
-// holding shift and clicking this many times within this many seconds
 const DEBUG_SHIFT_CLICKS_REQUIRED = 5;
 const DEBUG_SHIFT_CLICK_WINDOW_MS = 7000;
 
-const ACTION_MENU_WIDTH = 160;
-const ACTION_MENU_HEIGHT = 112; // three items + padding, used for flip/clamp
+const ACTION_MENU_WIDTH = 224;
+const ACTION_MENU_HEIGHT = 160; // four entries in main mode, rounded
 const ACTION_MENU_MARGIN = 8;
 const PURGE_CONFIRM_WINDOW_MS = 4000;
 
@@ -40,20 +49,43 @@ interface ActionMenuState {
   top: number;
   left: number;
   isArchived?: boolean;
+  currentProjectId?: string | null;
+}
+
+interface NewProjectDialogState {
+  parentId?: string | null;
+  initialName?: string;
+  mode: "new" | "rename";
+  renameId?: string;
+}
+
+interface DeleteProjectDialogState {
+  id: string;
+  name: string;
 }
 
 export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
-  const { data, isLoading, error } = useChats();
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    null,
+  );
+
+  const { data, isLoading, error } = useChats(selectedProjectId);
   const archivedQuery = useArchivedChats();
   const deletedQuery = useDeletedChats();
+  const projectsQuery = useProjects();
   const queryClient = useQueryClient();
   const renameMutation = useRenameChat();
   const archiveMutation = useArchiveChat();
+  const moveMutation = useMoveChatToProject();
+  const createProjectMutation = useCreateProject();
+  const renameProjectMutation = useRenameProject();
+  const deleteProjectMutation = useDeleteProject();
   const {
     schedule: scheduleDelete,
     undo: undoDelete,
     pending: pendingDeletes,
   } = useDeleteChat();
+
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +93,22 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   const [copiedChatId, setCopiedChatId] = useState<string | null>(null);
   const [actionMenu, setActionMenu] = useState<ActionMenuState | null>(null);
   const [confirmPurgeId, setConfirmPurgeId] = useState<string | null>(null);
+  const [newProjectDialog, setNewProjectDialog] =
+    useState<NewProjectDialogState | null>(null);
+  const [deleteProjectDialog, setDeleteProjectDialog] =
+    useState<DeleteProjectDialogState | null>(null);
+
+  const projects = projectsQuery.data?.projects ?? [];
+
+  // Reset selection if the selected project disappears from the list — this
+  // happens when a project is deleted (by us, or as part of a subtree).
+  useEffect(() => {
+    if (selectedProjectId && projects.length >= 0 && projectsQuery.isSuccess) {
+      if (!projects.some((p) => p.id === selectedProjectId)) {
+        setSelectedProjectId(null);
+      }
+    }
+  }, [selectedProjectId, projects, projectsQuery.isSuccess]);
 
   const closeActionMenu = useCallback(() => setActionMenu(null), []);
 
@@ -93,7 +141,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     setEditValue("");
 
     queryClient.setQueryData(
-      ["chats"],
+      ["chats", "list", selectedProjectId ?? "root"],
       (oldData: ChatsResponse | undefined) => {
         if (!oldData?.chatInfos) return oldData;
         return new ChatsResponse({
@@ -111,7 +159,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     } catch (error: unknown) {
       queryClient.invalidateQueries({ queryKey: ["chats"] });
     }
-  }, [editingChatId, editValue, renameMutation, queryClient]);
+  }, [editingChatId, editValue, renameMutation, queryClient, selectedProjectId]);
 
   useEffect(() => {
     if (editingChatId && inputRef.current) {
@@ -192,6 +240,31 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     ].filter((group) => group.chats.length > 0);
   }, [groupedChats]);
 
+  // Breadcrumb + child chips derive from the flat project list.
+  const breadcrumb = useMemo(() => {
+    if (!selectedProjectId) return [];
+    const map = new Map(projects.map((p) => [p.id, p]));
+    const chain: Array<{ id: string; name: string }> = [];
+    let cur: string | null | undefined = selectedProjectId;
+    const guard = new Set<string>();
+    while (cur) {
+      if (guard.has(cur)) break; // cycle safety — should never happen
+      guard.add(cur);
+      const p = map.get(cur);
+      if (!p) break;
+      chain.unshift({ id: p.id, name: p.name });
+      cur = p.parentId ?? null;
+    }
+    return chain;
+  }, [selectedProjectId, projects]);
+
+  const childProjects = useMemo(() => {
+    if (!selectedProjectId) return [];
+    return projects
+      .filter((p) => p.parentId === selectedProjectId)
+      .map((p) => ({ id: p.id, name: p.name }));
+  }, [projects, selectedProjectId]);
+
   const handleDeleteChat = useCallback(
     (chatId: string, chatTitle: string) => {
       scheduleDelete(chatId, chatTitle);
@@ -208,6 +281,17 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
       }
     },
     [archiveMutation],
+  );
+
+  const handleMoveToProject = useCallback(
+    async (chatId: string, projectId: string | null) => {
+      try {
+        await moveMutation.mutateAsync({ chatId, projectId });
+      } catch (err) {
+        console.error("Failed to move chat:", err);
+      }
+    },
+    [moveMutation],
   );
 
   const handleRestoreChat = useCallback(
@@ -275,17 +359,18 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
     [shiftClicks],
   );
 
-  // Right-click keeps using the native shell menu.
   const handleContextMenu = useCallback(
     async (
       _: React.MouseEvent,
       chatId: string,
       chatTitle: string,
       isArchived: boolean = false,
+      currentProjectId: string | null = null,
     ) => {
       const selectedAction = await window.menu([
         { label: "Rename", enabled: true },
         { label: isArchived ? "Unarchive" : "Archive", enabled: true },
+        { label: "Move to project", enabled: true },
         { label: "Delete", enabled: true },
       ]);
 
@@ -295,6 +380,17 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         handleArchiveToggle(chatId, true);
       } else if (selectedAction === "Unarchive") {
         handleArchiveToggle(chatId, false);
+      } else if (selectedAction === "Move to project") {
+        // Native shell menu has no submenu; use the DOM menu for the picker.
+        const rect = { bottom: window.innerHeight / 2, top: 0, right: window.innerWidth / 2 } as DOMRect;
+        setActionMenu({
+          chatId,
+          title: chatTitle,
+          top: rect.bottom,
+          left: rect.right,
+          isArchived,
+          currentProjectId,
+        });
       } else if (selectedAction === "Delete") {
         handleDeleteChat(chatId, chatTitle);
       }
@@ -308,6 +404,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
       title: string,
       anchor: HTMLElement,
       isArchived: boolean = false,
+      currentProjectId: string | null = null,
     ) => {
       const rect = anchor.getBoundingClientRect();
 
@@ -324,7 +421,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         left = window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_MARGIN;
       }
 
-      setActionMenu({ chatId, title, top, left, isArchived });
+      setActionMenu({ chatId, title, top, left, isArchived, currentProjectId });
     },
     [],
   );
@@ -352,6 +449,119 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
   const isWindows = navigator.platform.toLowerCase().includes("win");
   const archivedChats = archivedQuery.data?.chatInfos ?? [];
   const deletedChats = deletedQuery.data?.chatInfos ?? [];
+  const inProject = selectedProjectId !== null;
+  const chatsTitle = inProject ? "Chats" : "Chats";
+
+  const renderChatRow = (
+    chat: (typeof sortedChats)[number],
+    opts: { isArchived?: boolean; allowRename?: boolean } = {},
+  ) => {
+    const { isArchived = false, allowRename = true } = opts;
+    const editing = editingChatId === chat.id;
+    const currentProjectId = chat.projectId ?? null;
+    return (
+      <div
+        key={chat.id}
+        className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
+          chat.id === currentChatId ? "bg-surface-hover text-fg" : ""
+        }`}
+        onMouseEnter={() => handleMouseEnter(chat.id)}
+        onContextMenu={(e) =>
+          handleContextMenu(
+            e,
+            chat.id,
+            chat.title || chat.userExcerpt || chat.createdAt.toLocaleString(),
+            isArchived,
+            currentProjectId,
+          )
+        }
+      >
+        {allowRename && editing ? (
+          <div className="flex-1 flex items-center min-w-0 px-2 py-2 bg-surface-hover text-fg rounded-lg">
+            <span className="truncate font-sans text-sm w-full">
+              <input
+                ref={inputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveRename();
+                  } else if (e.key === "Escape") {
+                    setEditingChatId(null);
+                    setEditValue("");
+                  }
+                }}
+                className="bg-transparent border-0 focus:outline-none w-full"
+                style={{
+                  font: "inherit",
+                  lineHeight: "inherit",
+                  padding: 0,
+                  margin: 0,
+                }}
+              />
+            </span>
+          </div>
+        ) : (
+          <Link
+            to="/c/$chatId"
+            params={{ chatId: chat.id }}
+            className="flex-1 flex items-center min-w-0 px-2 py-2 select-none"
+            onClick={(e) => {
+              handleShiftClick(e, chat.id);
+            }}
+            draggable={false}
+          >
+            <span className="truncate font-sans text-sm">
+              {chat.title ||
+                chat.userExcerpt ||
+                chat.createdAt.toLocaleString()}
+            </span>
+            {copiedChatId === chat.id && (
+              <span className="ml-2 text-xs text-green-600 dark:text-green-400">
+                Copied!
+              </span>
+            )}
+          </Link>
+        )}
+        {(!allowRename || !editing) && (
+          <button
+            type="button"
+            aria-label="Chat actions"
+            aria-haspopup="menu"
+            aria-expanded={actionMenu?.chatId === chat.id}
+            title="Chat actions"
+            data-chat-menu-trigger
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (actionMenu?.chatId === chat.id) {
+                setActionMenu(null);
+                return;
+              }
+              openActionMenu(
+                chat.id,
+                chat.title ||
+                  chat.userExcerpt ||
+                  chat.createdAt.toLocaleString(),
+                e.currentTarget,
+                isArchived,
+                currentProjectId,
+              );
+            }}
+            className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
+              chat.id === currentChatId || actionMenu?.chatId === chat.id
+                ? "opacity-100"
+                : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
+            }`}
+          >
+            <EllipsisHorizontalIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <nav className="flex flex-1 flex-col min-h-0 select-none">
@@ -387,16 +597,45 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         )}
       </header>
 
-      {/*
-        Three bounded widgets stacked vertically. No single scroll on this
-        container: Chats grows to fill the remaining height and scrolls
-        internally, while Archived and Recently Deleted are capped widgets that
-        scroll independently when expanded. Add enough chats and the sidebar
-        still has exactly one scrollbar per active panel, never one runaway list.
-      */}
       <div className="flex flex-1 flex-col min-h-0 gap-1 px-4 py-1">
+        <ProjectsPanel
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          onSelect={(id) => setSelectedProjectId(id)}
+          onNewProject={() =>
+            setNewProjectDialog({ mode: "new", parentId: null })
+          }
+          onRename={(id, currentName) =>
+            setNewProjectDialog({
+              mode: "rename",
+              renameId: id,
+              initialName: currentName,
+            })
+          }
+          onDelete={(id) => {
+            const p = projects.find((x) => x.id === id);
+            if (p) {
+              setDeleteProjectDialog({ id: p.id, name: p.name });
+            }
+          }}
+        />
+
+        {inProject && (
+          <ProjectBreadcrumb
+            breadcrumb={breadcrumb}
+            childProjects={childProjects}
+            onNavigate={(id) => setSelectedProjectId(id)}
+            onNewSubproject={() =>
+              setNewProjectDialog({
+                mode: "new",
+                parentId: selectedProjectId,
+              })
+            }
+          />
+        )}
+
         <CollapsibleSection
-          title="Chats"
+          title={chatsTitle}
           count={sortedChats.length}
           defaultOpen
           className="flex-1"
@@ -404,7 +643,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
         >
           {chatGroups.length === 0 ? (
             <p className="px-2 py-1 text-xs text-fg-muted/70 select-none">
-              No conversations yet
+              {inProject ? "No chats in this project yet" : "No unfiled conversations yet"}
             </p>
           ) : (
             chatGroups.map((group) => (
@@ -412,110 +651,7 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
                 <h3 className="text-xs font-medium text-fg-muted px-2 py-1 select-none">
                   {group.name}
                 </h3>
-                {group.chats.map((chat) => (
-                  <div
-                    key={chat.id}
-                    className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
-                      chat.id === currentChatId
-                        ? "bg-surface-hover text-fg"
-                        : ""
-                    }`}
-                    onMouseEnter={() => handleMouseEnter(chat.id)}
-                    onContextMenu={(e) =>
-                      handleContextMenu(
-                        e,
-                        chat.id,
-                        chat.title ||
-                          chat.userExcerpt ||
-                          chat.createdAt.toLocaleString(),
-                      )
-                    }
-                  >
-                    {editingChatId === chat.id ? (
-                      <div className="flex-1 flex items-center min-w-0 px-2 py-2 bg-surface-hover text-fg rounded-lg">
-                        <span className="truncate font-sans text-sm w-full">
-                          <input
-                            ref={inputRef}
-                            type="text"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                saveRename();
-                              } else if (e.key === "Escape") {
-                                setEditingChatId(null);
-                                setEditValue("");
-                              }
-                            }}
-                            className="bg-transparent border-0 focus:outline-none w-full"
-                            style={{
-                              font: "inherit",
-                              lineHeight: "inherit",
-                              padding: 0,
-                              margin: 0,
-                            }}
-                          />
-                        </span>
-                      </div>
-                    ) : (
-                      <Link
-                        to="/c/$chatId"
-                        params={{ chatId: chat.id }}
-                        className="flex-1 flex items-center min-w-0 px-2 py-2 select-none"
-                        onClick={(e) => {
-                          handleShiftClick(e, chat.id);
-                        }}
-                        draggable={false}
-                      >
-                        <span className="truncate font-sans text-sm">
-                          {chat.title ||
-                            chat.userExcerpt ||
-                            chat.createdAt.toLocaleString()}
-                        </span>
-                        {copiedChatId === chat.id && (
-                          <span className="ml-2 text-xs text-green-600 dark:text-green-400">
-                            Copied!
-                          </span>
-                        )}
-                      </Link>
-                    )}
-                    {editingChatId !== chat.id && (
-                      <button
-                        type="button"
-                        aria-label="Chat actions"
-                        aria-haspopup="menu"
-                        aria-expanded={actionMenu?.chatId === chat.id}
-                        title="Chat actions"
-                        data-chat-menu-trigger
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (actionMenu?.chatId === chat.id) {
-                            setActionMenu(null);
-                            return;
-                          }
-                          openActionMenu(
-                            chat.id,
-                            chat.title ||
-                              chat.userExcerpt ||
-                              chat.createdAt.toLocaleString(),
-                            e.currentTarget,
-                            false,
-                          );
-                        }}
-                        className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
-                          chat.id === currentChatId ||
-                          actionMenu?.chatId === chat.id
-                            ? "opacity-100"
-                            : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
-                        }`}
-                      >
-                        <EllipsisHorizontalIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {group.chats.map((chat) => renderChatRow(chat))}
               </div>
             ))
           )}
@@ -533,72 +669,12 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
               No archived conversations
             </p>
           ) : (
-            archivedChats.map((chat) => (
-              <div
-                key={chat.id}
-                className={`allow-context-menu group flex items-center relative text-sm text-fg-muted rounded-lg hover:bg-surface-hover ${
-                  chat.id === currentChatId
-                    ? "bg-surface-hover text-fg"
-                    : ""
-                }`}
-                onMouseEnter={() => handleMouseEnter(chat.id)}
-                onContextMenu={(e) =>
-                  handleContextMenu(
-                    e,
-                    chat.id,
-                    chat.title ||
-                      chat.userExcerpt ||
-                      chat.createdAt.toLocaleString(),
-                    true,
-                  )
-                }
-              >
-                <Link
-                  to="/c/$chatId"
-                  params={{ chatId: chat.id }}
-                  className="flex-1 flex items-center min-w-0 px-2 py-2 select-none"
-                  draggable={false}
-                >
-                  <span className="truncate font-sans text-sm">
-                    {chat.title ||
-                      chat.userExcerpt ||
-                      chat.createdAt.toLocaleString()}
-                  </span>
-                </Link>
-                <button
-                  type="button"
-                  aria-label="Chat actions"
-                  aria-haspopup="menu"
-                  aria-expanded={actionMenu?.chatId === chat.id}
-                  title="Chat actions"
-                  data-chat-menu-trigger
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (actionMenu?.chatId === chat.id) {
-                      setActionMenu(null);
-                      return;
-                    }
-                    openActionMenu(
-                      chat.id,
-                      chat.title ||
-                        chat.userExcerpt ||
-                        chat.createdAt.toLocaleString(),
-                      e.currentTarget,
-                      true,
-                    );
-                  }}
-                  className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted transition-opacity hover:text-fg focus:outline-none ${
-                    chat.id === currentChatId ||
-                    actionMenu?.chatId === chat.id
-                      ? "opacity-100"
-                      : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100"
-                  }`}
-                >
-                  <EllipsisHorizontalIcon className="h-4 w-4" />
-                </button>
-              </div>
-            ))
+            archivedChats.map((chat) =>
+              renderChatRow(chat as (typeof sortedChats)[number], {
+                isArchived: true,
+                allowRename: false,
+              }),
+            )
           )}
         </CollapsibleSection>
 
@@ -650,10 +726,14 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
                     <button
                       type="button"
                       aria-label={
-                        isConfirming ? "Confirm delete forever" : "Delete forever"
+                        isConfirming
+                          ? "Confirm delete forever"
+                          : "Delete forever"
                       }
                       title={
-                        isConfirming ? "Click again to confirm" : "Delete forever"
+                        isConfirming
+                          ? "Click again to confirm"
+                          : "Delete forever"
                       }
                       onClick={(e) => {
                         e.preventDefault();
@@ -694,31 +774,96 @@ export function ChatSidebar({ currentChatId }: ChatSidebarProps) {
           ))}
         </div>
       )}
+
       {actionMenu &&
         createPortal(
           <ChatActionsMenu
             top={actionMenu.top}
             left={actionMenu.left}
             isArchived={actionMenu.isArchived}
+            currentProjectId={actionMenu.currentProjectId ?? null}
+            projects={projects.map((p) => ({
+              id: p.id,
+              name: p.name,
+              parentId: p.parentId ?? null,
+            }))}
             onRename={() => {
               startEditing(actionMenu.chatId, actionMenu.title);
               setActionMenu(null);
             }}
             onArchive={() => {
-              handleArchiveToggle(
-                actionMenu.chatId,
-                !actionMenu.isArchived,
-              );
+              handleArchiveToggle(actionMenu.chatId, !actionMenu.isArchived);
               setActionMenu(null);
             }}
             onDelete={() => {
               handleDeleteChat(actionMenu.chatId, actionMenu.title);
               setActionMenu(null);
             }}
+            onMoveToProject={(projectId) => {
+              handleMoveToProject(actionMenu.chatId, projectId);
+              setActionMenu(null);
+            }}
+            onCreateProject={() =>
+              setNewProjectDialog({ mode: "new", parentId: selectedProjectId })
+            }
             onClose={closeActionMenu}
           />,
           document.body,
         )}
+
+      {newProjectDialog && (
+        <NewProjectDialog
+          title={
+            newProjectDialog.mode === "rename"
+              ? "Rename project"
+              : newProjectDialog.parentId
+                ? "New subproject"
+                : "New project"
+          }
+          initialName={newProjectDialog.initialName ?? ""}
+          submitLabel={newProjectDialog.mode === "rename" ? "Save" : "Create"}
+          onSubmit={(name) => {
+            if (
+              newProjectDialog.mode === "rename" &&
+              newProjectDialog.renameId
+            ) {
+              renameProjectMutation.mutate({
+                id: newProjectDialog.renameId,
+                name,
+              });
+            } else {
+              createProjectMutation.mutate({
+                name,
+                parentId: newProjectDialog.parentId ?? null,
+              });
+            }
+          }}
+          onClose={() => setNewProjectDialog(null)}
+        />
+      )}
+
+      {deleteProjectDialog && (
+        <DeleteProjectDialog
+          projectId={deleteProjectDialog.id}
+          projectName={deleteProjectDialog.name}
+          onConfirm={(mode) => {
+            deleteProjectMutation.mutate(
+              { id: deleteProjectDialog.id, mode },
+              {
+                onSuccess: () => {
+                  // If we were inside the deleted subtree, drop back to root.
+                  // The useEffect above also catches this on the refetch, but
+                  // doing it here avoids a flash of a stale breadcrumb.
+                  if (selectedProjectId === deleteProjectDialog.id) {
+                    setSelectedProjectId(null);
+                  }
+                },
+              },
+            );
+          }}
+          onClose={() => setDeleteProjectDialog(null)}
+        />
+      )}
     </nav>
   );
 }

@@ -17,6 +17,7 @@ type ChatInfo struct {
 	UpdatedAt   time.Time  `json:"updatedAt" ts_type:"Date" ts_transform:"new Date(__VALUE__)"`
 	ArchivedAt  *time.Time `json:"archivedAt,omitempty" ts_type:"Date | undefined" ts_transform:"__VALUE__ && new Date(__VALUE__)"`
 	DeletedAt   *time.Time `json:"deletedAt,omitempty" ts_type:"Date | undefined" ts_transform:"__VALUE__ && new Date(__VALUE__)"`
+	ProjectID   *string    `json:"projectId,omitempty"`
 }
 
 type ChatsResponse struct {
@@ -25,6 +26,27 @@ type ChatsResponse struct {
 
 type ChatResponse struct {
 	Chat store.Chat `json:"chat"`
+}
+
+// Project is the JSON shape for a project in the sidebar tree. ChatCount
+// counts only chats directly assigned to this project (not descendants).
+type Project struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	ParentID  *string   `json:"parentId,omitempty"`
+	CreatedAt time.Time `json:"createdAt" ts_type:"Date" ts_transform:"new Date(__VALUE__)"`
+	SortOrder int       `json:"sortOrder"`
+	ChatCount int       `json:"chatCount"`
+}
+
+type ProjectsResponse struct {
+	Projects []Project `json:"projects"`
+}
+
+// ProjectStats describes what will happen if a project subtree is deleted.
+type ProjectStats struct {
+	ChatCount       int `json:"chatCount"`
+	SubprojectCount int `json:"subprojectCount"`
 }
 
 type Model struct {
@@ -123,6 +145,12 @@ type ChatRequest struct {
 	FileTools   *bool        `json:"file_tools,omitempty"`
 	ForceUpdate bool         `json:"forceUpdate,omitempty"`
 	Think       any          `json:"think,omitempty"`
+
+	// ProjectID associates a newly-created chat with a project. Only applied
+	// when the chat does not already belong to one — this lets the frontend
+	// pass a "create in project X" hint without accidentally moving a chat
+	// out of its current project.
+	ProjectID *string `json:"projectId,omitempty"`
 }
 
 type Error struct {

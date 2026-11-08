@@ -104,20 +104,20 @@ type Model struct {
 }
 
 type Chat struct {
-	ID     string    `json:"id"`
+	ID       string    `json:"id"`
 	Messages []Message `json:"messages"`
 	Title    string    `json:"title"`
 	CreatedAt time.Time `json:"created_at"`
 
 	// ArchivedAt is a nullable timestamp. NULL = active, non-NULL = archived.
-	// Populated by queryChats and getChatWithOptions; written only by
-	// archiveChat/unarchiveChat so that saveChat cannot clobber it.
 	ArchivedAt *time.Time `json:"archived_at,omitempty" ts_type:"Date | undefined" ts_transform:"__VALUE__ && new Date(__VALUE__)"`
 
 	// DeletedAt is a nullable timestamp. NULL = live, non-NULL = in the trash.
-	// Populated by queryChats and getChatWithOptions; written only by
-	// softDeleteChat/restoreChat/purgeChat.
 	DeletedAt *time.Time `json:"deleted_at,omitempty" ts_type:"Date | undefined" ts_transform:"__VALUE__ && new Date(__VALUE__)"`
+
+	// ProjectID is the chat's project membership. NULL = Unfiled (root view).
+	// Written only by MoveChatToProject so saveChat can't clobber it.
+	ProjectID *string `json:"project_id,omitempty"`
 
 	BrowserState json.RawMessage `json:"browser_state,omitempty" ts_type:"BrowserStateData"`
 }
@@ -129,6 +129,20 @@ func NewChat(id string) *Chat {
 		Messages:  []Message{},
 		CreatedAt: time.Now(),
 	}
+}
+
+// Project is a named container for chats. Projects may nest via ParentID.
+// Deleting a project with children deletes the whole subtree; the delete
+// modes control what happens to the chats (promote to Unfiled, or move them
+// into the 30-day trash). Project structure is never allowed to cascade into
+// conversation destruction.
+type Project struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	ParentID  *string   `json:"parent_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	SortOrder int       `json:"sort_order"`
+	ChatCount int       `json:"chat_count"`
 }
 
 type Settings struct {
@@ -391,12 +405,22 @@ func (s *Store) SetSettings(settings Settings) error {
 	return s.db.setSettings(settings)
 }
 
-// Chats returns every chat that is neither archived nor deleted.
+// Chats returns unfiled chats (project_id IS NULL) that are neither archived
+// nor deleted. Preserve the historic zero-argument signature so existing
+// callers (tests, listChats without a ?project param) keep working unchanged.
 func (s *Store) Chats() ([]Chat, error) {
 	if err := s.ensureDB(); err != nil {
 		return nil, err
 	}
 	return s.db.getAllChats()
+}
+
+// ChatsInProject returns the chats belonging to a specific project.
+func (s *Store) ChatsInProject(projectID string) ([]Chat, error) {
+	if err := s.ensureDB(); err != nil {
+		return nil, err
+	}
+	return s.db.getProjectChats(projectID)
 }
 
 // ArchivedChats returns archived chats, most recently archived first.
@@ -491,6 +515,70 @@ func (s *Store) DeleteChat(id string) error {
 		return err
 	}
 	return s.db.softDeleteChat(id)
+}
+
+// ---------- Projects ----------
+
+// Projects returns every project with its direct (non-archived, non-deleted)
+// chat count. Ordering is stable by sort_order then name.
+func (s *Store) Projects() ([]Project, error) {
+	if err := s.ensureDB(); err != nil {
+		return nil, err
+	}
+	return s.db.getProjects()
+}
+
+// CreateProject inserts a new project. parentID may be nil for a top-level
+// project, or a valid project ID for a subproject.
+func (s *Store) CreateProject(name string, parentID *string) (*Project, error) {
+	if err := s.ensureDB(); err != nil {
+		return nil, err
+	}
+	return s.db.createProject(name, parentID)
+}
+
+// RenameProject updates a project's name. Structure is untouched.
+func (s *Store) RenameProject(id, name string) error {
+	if err := s.ensureDB(); err != nil {
+		return err
+	}
+	return s.db.renameProject(id, name)
+}
+
+// DeleteProject removes the project and every descendant. `mode` determines
+// what happens to chats in the subtree:
+//
+//   - "promote" (default): chats are unfiled and return to the Unfiled root.
+//   - "delete": chats are soft-deleted and appear in Recently Deleted for 30
+//     days. Conversations are never hard-destroyed by a project delete.
+//
+// Returns the deleted project IDs.
+func (s *Store) DeleteProject(id, mode string) ([]string, error) {
+	if err := s.ensureDB(); err != nil {
+		return nil, err
+	}
+	if mode != "promote" && mode != "delete" {
+		mode = "promote"
+	}
+	return s.db.deleteProject(id, mode)
+}
+
+// MoveChatToProject associates a chat with a project, or clears the
+// association when projectID is nil/empty (Unfiled).
+func (s *Store) MoveChatToProject(chatID string, projectID *string) error {
+	if err := s.ensureDB(); err != nil {
+		return err
+	}
+	return s.db.moveChatToProject(chatID, projectID)
+}
+
+// ProjectSubtreeStats returns the chat and subproject counts under a project
+// root. Used by the delete-project dialog.
+func (s *Store) ProjectSubtreeStats(id string) (chatCount, subprojectCount int, err error) {
+	if err := s.ensureDB(); err != nil {
+		return 0, 0, err
+	}
+	return s.db.projectSubtreeStats(id)
 }
 
 func (s *Store) WindowSize() (int, int, error) {

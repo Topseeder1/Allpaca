@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/topseeder1/allpaca/app/types/not"
 )
 
 // currentSchemaVersion defines the current database schema version.
 // Increment this when making schema changes that require migrations.
-const currentSchemaVersion = 14
+const currentSchemaVersion = 15
 
 // database wraps the SQLite connection.
 // SQLite handles its own locking for concurrent access:
@@ -58,6 +59,12 @@ func (db *database) init() error {
 		return fmt.Errorf("enable foreign keys: %w", err)
 	}
 
+	// Table definitions only. Indexes that reference columns added by a
+	// migration MUST NOT live here: on an existing database CREATE TABLE
+	// IF NOT EXISTS is a no-op, so the new column is absent until migrate()
+	// runs. Creating such an index inline fails with "no such column" and
+	// aborts init() before migrate() can add the column. Any index on a
+	// migration-added column goes in the post-migrate block below.
 	schema := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS settings (
 		id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -87,12 +94,21 @@ func (db *database) init() error {
 
 	INSERT OR IGNORE INTO settings (id) VALUES (1);
 
+	CREATE TABLE IF NOT EXISTS projects (
+		id         TEXT PRIMARY KEY,
+		name       TEXT NOT NULL,
+		parent_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		sort_order INTEGER NOT NULL DEFAULT 0
+	);
+
 	CREATE TABLE IF NOT EXISTS chats (
 		id TEXT PRIMARY KEY,
 		title TEXT NOT NULL DEFAULT '',
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		archived_at TIMESTAMP,
 		deleted_at TIMESTAMP,
+		project_id TEXT,
 		browser_state TEXT
 	);
 
@@ -152,6 +168,18 @@ func (db *database) init() error {
 
 	if err := db.migrate(); err != nil {
 		return fmt.Errorf("migrate schema: %w", err)
+	}
+
+	// Post-migration indexes. These reference columns that may be added by
+	// migrate(), so they run after migrate() to guarantee the column exists
+	// on both fresh and upgraded databases. IF NOT EXISTS makes this a no-op
+	// for databases where migrate() already built them.
+	postMigrationIndexes := `
+		CREATE INDEX IF NOT EXISTS idx_projects_parent_id ON projects(parent_id);
+		CREATE INDEX IF NOT EXISTS idx_chats_project_id ON chats(project_id);
+	`
+	if _, err := db.conn.Exec(postMigrationIndexes); err != nil {
+		return fmt.Errorf("create post-migration indexes: %w", err)
 	}
 
 	if err := db.cleanupOrphanedData(); err != nil {
@@ -234,6 +262,11 @@ func (db *database) migrate() error {
 				return fmt.Errorf("migrate v13 to v14: %w", err)
 			}
 			version = 14
+		case 14:
+			if err := db.migrateV14ToV15(); err != nil {
+				return fmt.Errorf("migrate v14 to v15: %w", err)
+			}
+			version = 15
 		default:
 			version = currentSchemaVersion
 		}
@@ -428,6 +461,49 @@ func (db *database) migrateV13ToV14() error {
 	return nil
 }
 
+// migrateV14ToV15 adds the projects table and chats.project_id. The
+// project tree is self-referential (parent_id → projects.id, ON DELETE SET
+// NULL to prevent structural deletes from ever cascading into chat loss).
+// chats.project_id has NO foreign key at all: chats can outlive projects,
+// and project deletion routes through explicit UPDATEs so it can never
+// silently destroy a conversation.
+func (db *database) migrateV14ToV15() error {
+	_, err := db.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS projects (
+			id         TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			parent_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			sort_order INTEGER NOT NULL DEFAULT 0
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("create projects table: %w", err)
+	}
+
+	_, err = db.conn.Exec(`ALTER TABLE chats ADD COLUMN project_id TEXT`)
+	if err != nil && !duplicateColumnError(err) {
+		return fmt.Errorf("add project_id column: %w", err)
+	}
+
+	// Indexes on migration-added columns are created here for the upgraded-
+	// database path, and again in init() post-migrate for the fresh-database
+	// path (which never enters this migration). IF NOT EXISTS dedupes.
+	_, err = db.conn.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_projects_parent_id ON projects(parent_id);
+		CREATE INDEX IF NOT EXISTS idx_chats_project_id ON chats(project_id);
+	`)
+	if err != nil {
+		return fmt.Errorf("create project indexes: %w", err)
+	}
+
+	_, err = db.conn.Exec(`UPDATE settings SET schema_version = 15`)
+	if err != nil {
+		return fmt.Errorf("update schema version: %w", err)
+	}
+	return nil
+}
+
 func (db *database) cleanupOrphanedData() error {
 	_, err := db.conn.Exec(`
 		DELETE FROM tool_calls
@@ -475,7 +551,9 @@ func columnNotExists(err error) bool {
 // queryChats is the single source of truth for the chat list projection used
 // by the active list, the archive, and the trash. `where` and `orderBy` are
 // compile-time constants supplied by the callers below, never user input.
-func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
+// Additional `args` bind to ? placeholders in `where` and follow the
+// parameterized-project filter added in v15.
+func (db *database) queryChats(where, orderBy string, args ...any) ([]Chat, error) {
 	query := fmt.Sprintf(`
 		SELECT 
 			c.id, 
@@ -483,6 +561,7 @@ func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
 			c.created_at,
 			c.archived_at,
 			c.deleted_at,
+			c.project_id,
 			COALESCE(first_msg.content, '') as first_user_content,
 			COALESCE(datetime(MAX(m.updated_at)), datetime(c.created_at)) as last_updated
 		FROM chats c
@@ -494,11 +573,11 @@ func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
 		) first_msg ON c.id = first_msg.chat_id
 		LEFT JOIN messages m ON c.id = m.chat_id
 		WHERE %s
-		GROUP BY c.id, c.title, c.created_at, c.archived_at, c.deleted_at, first_msg.content
+		GROUP BY c.id, c.title, c.created_at, c.archived_at, c.deleted_at, c.project_id, first_msg.content
 		ORDER BY %s
 	`, where, orderBy)
 
-	rows, err := db.conn.Query(query)
+	rows, err := db.conn.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query chats: %w", err)
 	}
@@ -509,6 +588,7 @@ func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
 		var chat Chat
 		var createdAt time.Time
 		var archivedAt, deletedAt sql.NullTime
+		var projectID sql.NullString
 		var firstUserContent string
 		var lastUpdatedStr string
 
@@ -518,6 +598,7 @@ func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
 			&createdAt,
 			&archivedAt,
 			&deletedAt,
+			&projectID,
 			&firstUserContent,
 			&lastUpdatedStr,
 		)
@@ -531,6 +612,10 @@ func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
 		}
 		if deletedAt.Valid {
 			chat.DeletedAt = &deletedAt.Time
+		}
+		if projectID.Valid {
+			pid := projectID.String
+			chat.ProjectID = &pid
 		}
 
 		lastUpdated, _ := time.Parse("2006-01-02 15:04:05", lastUpdatedStr)
@@ -554,13 +639,29 @@ func (db *database) queryChats(where, orderBy string) ([]Chat, error) {
 	return chats, nil
 }
 
-// getAllChats returns every chat that is neither archived nor deleted.
+// getAllChats returns unfiled chats (project_id IS NULL) that are neither
+// archived nor deleted. Chats inside a project are excluded from the root
+// view — they surface via getProjectChats.
 func (db *database) getAllChats() ([]Chat, error) {
-	return db.queryChats("c.archived_at IS NULL AND c.deleted_at IS NULL", "last_updated DESC")
+	return db.queryChats(
+		"c.archived_at IS NULL AND c.deleted_at IS NULL AND c.project_id IS NULL",
+		"last_updated DESC",
+	)
+}
+
+// getProjectChats returns chats belonging to a specific project that are
+// neither archived nor deleted.
+func (db *database) getProjectChats(projectID string) ([]Chat, error) {
+	return db.queryChats(
+		"c.archived_at IS NULL AND c.deleted_at IS NULL AND c.project_id = ?",
+		"last_updated DESC",
+		projectID,
+	)
 }
 
 // getArchivedChats returns archived chats that are not deleted,
-// most recently archived first.
+// most recently archived first. Project filter intentionally not applied —
+// archive is a global view.
 func (db *database) getArchivedChats() ([]Chat, error) {
 	return db.queryChats("c.archived_at IS NOT NULL AND c.deleted_at IS NULL", "c.archived_at DESC")
 }
@@ -576,7 +677,7 @@ func (db *database) getDeletedChats() ([]Chat, error) {
 // auto-restore when the user replies.
 func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Chat, error) {
 	query := `
-		SELECT id, title, created_at, browser_state, archived_at, deleted_at
+		SELECT id, title, created_at, browser_state, archived_at, deleted_at, project_id
 		FROM chats
 		WHERE id = ?
 	`
@@ -585,6 +686,7 @@ func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Cha
 	var createdAt time.Time
 	var browserState sql.NullString
 	var archivedAt, deletedAt sql.NullTime
+	var projectID sql.NullString
 
 	err := db.conn.QueryRow(query, id).Scan(
 		&chat.ID,
@@ -593,6 +695,7 @@ func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Cha
 		&browserState,
 		&archivedAt,
 		&deletedAt,
+		&projectID,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -607,6 +710,10 @@ func (db *database) getChatWithOptions(id string, loadAttachmentData bool) (*Cha
 	}
 	if deletedAt.Valid {
 		chat.DeletedAt = &deletedAt.Time
+	}
+	if projectID.Valid {
+		pid := projectID.String
+		chat.ProjectID = &pid
 	}
 	if browserState.Valid && browserState.String != "" {
 		var raw json.RawMessage
@@ -632,9 +739,10 @@ func (db *database) saveChat(chat Chat) error {
 	defer tx.Rollback()
 
 	// COALESCE for browser_state preserves the existing payload when saving a
-	// chat that doesn't include a new state. archived_at and deleted_at are
-	// intentionally absent — they're owned by archiveChat/softDeleteChat so
-	// that write paths cannot clobber trash or archive status.
+	// chat that doesn't include a new state. archived_at, deleted_at, and
+	// project_id are intentionally absent — they're owned by their dedicated
+	// mutation methods so that write paths cannot clobber trash, archive, or
+	// project membership.
 	query := `
 		INSERT INTO chats (id, title, created_at, browser_state)
 		VALUES (?, ?, ?, ?)
@@ -687,13 +795,11 @@ func (db *database) softDeleteChat(id string) error {
 	if err != nil {
 		return fmt.Errorf("soft delete chat: %w", err)
 	}
-	// Already-deleted is a no-op, not an error.
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if rows == 0 {
-		// Confirm the row exists at all.
 		var exists int
 		if err := db.conn.QueryRow(`SELECT COUNT(1) FROM chats WHERE id = ?`, id).Scan(&exists); err != nil {
 			return fmt.Errorf("check chat exists: %w", err)
@@ -725,7 +831,6 @@ func (db *database) restoreChat(id string) error {
 		if exists == 0 {
 			return fmt.Errorf("%w: chat %s", not.Found, id)
 		}
-		// Not in trash — idempotent success.
 	}
 	return nil
 }
@@ -813,6 +918,270 @@ func archiveRowsAffected(result sql.Result, id string) error {
 		return fmt.Errorf("%w: chat %s", not.Found, id)
 	}
 	return nil
+}
+
+// ---------- Projects ----------
+
+// getProjects returns every project with its direct chat count. Chats that are
+// archived or deleted are excluded from chat_count so the badge matches what
+// the user sees when they drill in.
+func (db *database) getProjects() ([]Project, error) {
+	rows, err := db.conn.Query(`
+		SELECT
+			p.id,
+			p.name,
+			p.parent_id,
+			p.created_at,
+			p.sort_order,
+			(SELECT COUNT(*) FROM chats
+				WHERE project_id = p.id
+				  AND deleted_at IS NULL
+				  AND archived_at IS NULL) AS chat_count
+		FROM projects p
+		ORDER BY p.sort_order, p.name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query projects: %w", err)
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		var parentID sql.NullString
+		if err := rows.Scan(&p.ID, &p.Name, &parentID, &p.CreatedAt, &p.SortOrder, &p.ChatCount); err != nil {
+			return nil, fmt.Errorf("scan project: %w", err)
+		}
+		if parentID.Valid {
+			pid := parentID.String
+			p.ParentID = &pid
+		}
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate projects: %w", err)
+	}
+	return projects, nil
+}
+
+func (db *database) getProjectByID(id string) (*Project, error) {
+	var p Project
+	var parentID sql.NullString
+	err := db.conn.QueryRow(`
+		SELECT
+			p.id, p.name, p.parent_id, p.created_at, p.sort_order,
+			(SELECT COUNT(*) FROM chats
+				WHERE project_id = p.id
+				  AND deleted_at IS NULL
+				  AND archived_at IS NULL) AS chat_count
+		FROM projects p WHERE p.id = ?
+	`, id).Scan(&p.ID, &p.Name, &parentID, &p.CreatedAt, &p.SortOrder, &p.ChatCount)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("%w: project %s", not.Found, id)
+		}
+		return nil, fmt.Errorf("query project: %w", err)
+	}
+	if parentID.Valid {
+		pid := parentID.String
+		p.ParentID = &pid
+	}
+	return &p, nil
+}
+
+func (db *database) createProject(name string, parentID *string) (*Project, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("generate project id: %w", err)
+	}
+
+	var parent sql.NullString
+	if parentID != nil {
+		// Validate parent exists if provided.
+		var exists int
+		if err := db.conn.QueryRow(`SELECT COUNT(1) FROM projects WHERE id = ?`, *parentID).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("check parent project: %w", err)
+		}
+		if exists == 0 {
+			return nil, fmt.Errorf("%w: parent project %s", not.Found, *parentID)
+		}
+		parent = sql.NullString{String: *parentID, Valid: true}
+	}
+
+	if _, err := db.conn.Exec(
+		`INSERT INTO projects (id, name, parent_id) VALUES (?, ?, ?)`,
+		id.String(), name, parent,
+	); err != nil {
+		return nil, fmt.Errorf("create project: %w", err)
+	}
+
+	return db.getProjectByID(id.String())
+}
+
+func (db *database) renameProject(id, name string) error {
+	result, err := db.conn.Exec(`UPDATE projects SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		return fmt.Errorf("rename project: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w: project %s", not.Found, id)
+	}
+	return nil
+}
+
+// getProjectSubtree returns the IDs of the root project and every descendant,
+// using a recursive CTE. Order of the returned slice is not guaranteed and
+// callers must not depend on it.
+func (db *database) getProjectSubtree(id string) ([]string, error) {
+	rows, err := db.conn.Query(`
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id FROM projects WHERE id = ?
+			UNION ALL
+			SELECT p.id FROM projects p INNER JOIN subtree s ON p.parent_id = s.id
+		)
+		SELECT id FROM subtree
+	`, id)
+	if err != nil {
+		return nil, fmt.Errorf("query project subtree: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			return nil, fmt.Errorf("scan project subtree: %w", err)
+		}
+		ids = append(ids, sid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate project subtree: %w", err)
+	}
+	return ids, nil
+}
+
+// deleteProject deletes the project and every descendant in one transaction.
+// Chat handling depends on `mode`:
+//
+//   - "promote" (default): chats keep their rows and get project_id = NULL,
+//     falling back to the Unfiled root view. Conversations are never touched.
+//   - "delete": chats go through softDeleteChat semantics — deleted_at is
+//     stamped, messages and images survive, the user has 30 days to restore
+//     from Recently Deleted. Conversations are never hard-destroyed.
+//
+// Returns the deleted project IDs. Structural deletions can never cascade
+// into chat loss — that invariant is enforced here, in SQL, not in the UI.
+func (db *database) deleteProject(id, mode string) ([]string, error) {
+	subtree, err := db.getProjectSubtree(id)
+	if err != nil {
+		return nil, err
+	}
+	if len(subtree) == 0 {
+		return nil, fmt.Errorf("%w: project %s", not.Found, id)
+	}
+
+	placeholders := strings.Repeat("?,", len(subtree))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(subtree))
+	for i, sid := range subtree {
+		args[i] = sid
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin delete project tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if mode == "delete" {
+		if _, err := tx.Exec(fmt.Sprintf(
+			`UPDATE chats SET deleted_at = CURRENT_TIMESTAMP WHERE project_id IN (%s) AND deleted_at IS NULL`,
+			placeholders), args...); err != nil {
+			return nil, fmt.Errorf("soft delete chats in project subtree: %w", err)
+		}
+	} else {
+		if _, err := tx.Exec(fmt.Sprintf(
+			`UPDATE chats SET project_id = NULL WHERE project_id IN (%s)`,
+			placeholders), args...); err != nil {
+			return nil, fmt.Errorf("unfile chats in project subtree: %w", err)
+		}
+	}
+
+	if _, err := tx.Exec(fmt.Sprintf(
+		`DELETE FROM projects WHERE id IN (%s)`, placeholders), args...); err != nil {
+		return nil, fmt.Errorf("delete projects: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit delete project: %w", err)
+	}
+	return subtree, nil
+}
+
+// moveChatToProject sets or clears a chat's project membership. Passing nil or
+// an empty string removes the chat from any project, returning it to Unfiled.
+func (db *database) moveChatToProject(chatID string, projectID *string) error {
+	var exists int
+	if err := db.conn.QueryRow(`SELECT COUNT(1) FROM chats WHERE id = ?`, chatID).Scan(&exists); err != nil {
+		return fmt.Errorf("check chat exists: %w", err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("%w: chat %s", not.Found, chatID)
+	}
+
+	if projectID == nil || *projectID == "" {
+		if _, err := db.conn.Exec(`UPDATE chats SET project_id = NULL WHERE id = ?`, chatID); err != nil {
+			return fmt.Errorf("unfile chat: %w", err)
+		}
+		return nil
+	}
+
+	var projectExists int
+	if err := db.conn.QueryRow(`SELECT COUNT(1) FROM projects WHERE id = ?`, *projectID).Scan(&projectExists); err != nil {
+		return fmt.Errorf("check project exists: %w", err)
+	}
+	if projectExists == 0 {
+		return fmt.Errorf("%w: project %s", not.Found, *projectID)
+	}
+
+	if _, err := db.conn.Exec(`UPDATE chats SET project_id = ? WHERE id = ?`, *projectID, chatID); err != nil {
+		return fmt.Errorf("move chat to project: %w", err)
+	}
+	return nil
+}
+
+// projectSubtreeStats returns the number of chats and subprojects under
+// (and including) the given root. Used by the delete-project dialog to
+// describe what will happen.
+func (db *database) projectSubtreeStats(id string) (chatCount, subprojectCount int, err error) {
+	subtree, err := db.getProjectSubtree(id)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(subtree) == 0 {
+		return 0, 0, fmt.Errorf("%w: project %s", not.Found, id)
+	}
+
+	placeholders := strings.Repeat("?,", len(subtree))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, len(subtree))
+	for i, sid := range subtree {
+		args[i] = sid
+	}
+
+	if err := db.conn.QueryRow(fmt.Sprintf(
+		`SELECT COUNT(*) FROM chats
+		 WHERE project_id IN (%s) AND deleted_at IS NULL`,
+		placeholders), args...).Scan(&chatCount); err != nil {
+		return 0, 0, fmt.Errorf("count chats in subtree: %w", err)
+	}
+
+	subprojectCount = len(subtree) - 1 // exclude root
+	return chatCount, subprojectCount, nil
 }
 
 func (db *database) updateLastMessage(chatID string, msg Message) error {

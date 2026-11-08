@@ -84,7 +84,7 @@ const (
 	EventChat       Event = "chat"
 	EventComplete   Event = "complete"
 	EventLoading    Event = "loading"
-	EventToolResult Event = "tool_result" // Used for both tool calls and their results
+	EventToolResult Event = "tool_result"
 	EventThinking   Event = "thinking"
 	EventToolCall   Event = "tool_call"
 	EventDownload   Event = "download"
@@ -96,13 +96,11 @@ type Server struct {
 	Token        string
 	Store        *store.Store
 	ToolRegistry *tools.Registry
-	Tools        bool   // if true, the server will use single-turn tools to fulfill the user's request
-	WebSearch    bool   // if true, the server will use single-turn browser tool to fulfill the user's request
-	Agent        bool   // if true, the server will use multi-turn tools to fulfill the user's request
-	WorkingDir   string // Working directory for all agent operations
-
-	// Dev is true if the server is running in development mode
-	Dev bool
+	Tools        bool
+	WebSearch    bool
+	Agent        bool
+	WorkingDir   string
+	Dev          bool
 }
 
 func (s *Server) log() *slog.Logger {
@@ -112,7 +110,6 @@ func (s *Server) log() *slog.Logger {
 	return s.Logger
 }
 
-// ollamaProxy creates a reverse proxy handler to the Ollama server
 func (s *Server) ollamaProxy() http.Handler {
 	var (
 		proxy   http.Handler
@@ -181,21 +178,18 @@ type errHandlerFunc func(http.ResponseWriter, *http.Request) error
 func (s *Server) Handler() http.Handler {
 	handle := func(f errHandlerFunc) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Add CORS headers for dev work
 			if CORS() {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 
-				// Handle preflight requests
 				if r.Method == "OPTIONS" {
 					w.WriteHeader(http.StatusOK)
 					return
 				}
 			}
 
-			// Don't check for token in development mode
 			if !s.Dev {
 				cookie, err := r.Cookie("token")
 				if err != nil {
@@ -224,7 +218,6 @@ func (s *Server) Handler() http.Handler {
 					log = log.With("panic", p, "request_id", requestID)
 					level = slog.LevelError
 
-					// Handle panic with user-friendly error
 					if !sw.Written() {
 						s.handleError(sw, fmt.Errorf("internal server error"))
 					}
@@ -240,7 +233,6 @@ func (s *Server) Handler() http.Handler {
 					"version", version.Version,
 				)
 
-				// let net/http.Server deal with panics
 				if p != nil {
 					panic(p)
 				}
@@ -264,12 +256,11 @@ func (s *Server) Handler() http.Handler {
 
 	mux := http.NewServeMux()
 
-	// CORS is handled in `handle`, but we have to match on OPTIONS to handle preflight requests
 	mux.Handle("OPTIONS /", handle(func(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}))
 
-	// API routes - handle first to take precedence
+	// API routes
 	mux.Handle("GET /api/v1/chats", handle(s.listChats))
 	mux.Handle("GET /api/v1/chats/archived", handle(s.listArchivedChats))
 	mux.Handle("GET /api/v1/chats/deleted", handle(s.listDeletedChats))
@@ -282,6 +273,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/chat/{id}/unarchive", handle(s.unarchiveChat))
 	mux.Handle("POST /api/v1/chat/{id}/restore", handle(s.restoreChat))
 	mux.Handle("DELETE /api/v1/chat/{id}/purge", handle(s.purgeChat))
+	mux.Handle("PUT /api/v1/chat/{id}/project", handle(s.moveChatToProject))
+
+	// Projects
+	mux.Handle("GET /api/v1/projects", handle(s.listProjects))
+	mux.Handle("POST /api/v1/projects", handle(s.createProjectHandler))
+	mux.Handle("PUT /api/v1/project/{id}", handle(s.renameProjectHandler))
+	mux.Handle("DELETE /api/v1/project/{id}", handle(s.deleteProjectHandler))
+	mux.Handle("GET /api/v1/project/{id}/stats", handle(s.projectStatsHandler))
 
 	mux.Handle("GET /api/v1/inference-compute", handle(s.getInferenceCompute))
 	mux.Handle("POST /api/v1/model/upstream", handle(s.modelUpstream))
@@ -297,7 +296,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/me", ollamaProxy)
 	mux.Handle("POST /api/signout", ollamaProxy)
 
-	// React app - catch all non-API routes and serve the React app
 	mux.Handle("GET /", s.appHandler())
 	mux.Handle("PUT /", s.appHandler())
 	mux.Handle("POST /", s.appHandler())
@@ -307,9 +305,7 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-// handleError renders appropriate error responses based on request type
 func (s *Server) handleError(w http.ResponseWriter, e error) {
-	// Preserve CORS headers for API requests
 	if CORS() {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -322,19 +318,16 @@ func (s *Server) handleError(w http.ResponseWriter, e error) {
 	json.NewEncoder(w).Encode(map[string]string{"error": e.Error()})
 }
 
-// userAgentTransport is a custom RoundTripper that adds the User-Agent header to all requests
 type userAgentTransport struct {
 	base http.RoundTripper
 }
 
 func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Clone the request to avoid mutating the original
 	r := req.Clone(req.Context())
 	r.Header.Set("User-Agent", userAgent())
 	return t.base.RoundTrip(r)
 }
 
-// httpClient returns an HTTP client that automatically adds the User-Agent header
 func (s *Server) httpClient() *http.Client {
 	return &http.Client{
 		Timeout: 10 * time.Second,
@@ -344,10 +337,8 @@ func (s *Server) httpClient() *http.Client {
 	}
 }
 
-// doSelfSigned sends a self-signed request to the ollama.com API
 func (s *Server) doSelfSigned(ctx context.Context, method, path string) (*http.Response, error) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	// Form the string to sign: METHOD,PATH?ts=TIMESTAMP
 	signString := fmt.Sprintf("%s,%s?ts=%s", method, path, timestamp)
 	signature, err := ollamaAuth.Sign(ctx, []byte(signString))
 	if err != nil {
@@ -364,7 +355,6 @@ func (s *Server) doSelfSigned(ctx context.Context, method, path string) (*http.R
 	return s.httpClient().Do(req)
 }
 
-// UserData fetches user data from ollama.com API for the current ollama key
 func (s *Server) UserData(ctx context.Context) (*api.UserResponse, error) {
 	resp, err := s.doSelfSigned(ctx, http.MethodPost, "/api/me")
 	if err != nil {
@@ -395,7 +385,6 @@ func (s *Server) UserData(ctx context.Context) (*api.UserResponse, error) {
 	return &user, nil
 }
 
-// WaitForServer waits for the Ollama server to be ready
 func WaitForServer(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -427,7 +416,22 @@ func (s *Server) createChat(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
-	chats, _ := s.Store.Chats()
+	// Optional ?project=<id> filters to a project's chat list. Absent or empty
+	// means unfiled (root).
+	projectID := r.URL.Query().Get("project")
+
+	var (
+		chats []store.Chat
+		err   error
+	)
+	if projectID == "" {
+		chats, err = s.Store.Chats()
+	} else {
+		chats, err = s.Store.ChatsInProject(projectID)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to list chats: %w", err)
+	}
 
 	chatInfos := make([]responses.ChatInfo, len(chats))
 	for i, chat := range chats {
@@ -439,8 +443,6 @@ func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// listArchivedChats returns chats with archived_at set and deleted_at NULL.
-// Archived chats are excluded from listChats, so the two lists never overlap.
 func (s *Server) listArchivedChats(w http.ResponseWriter, r *http.Request) error {
 	chats, err := s.Store.ArchivedChats()
 	if err != nil {
@@ -457,8 +459,6 @@ func (s *Server) listArchivedChats(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-// listDeletedChats returns soft-deleted chats still within the 30-day grace
-// window, most recently deleted first.
 func (s *Server) listDeletedChats(w http.ResponseWriter, r *http.Request) error {
 	chats, err := s.Store.DeletedChats()
 	if err != nil {
@@ -475,13 +475,188 @@ func (s *Server) listDeletedChats(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-// checkModelUpstream makes a HEAD request to the Ollama registry to get the upstream digest and push time
+// ---------- Projects ----------
+
+func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) error {
+	projects, err := s.Store.Projects()
+	if err != nil {
+		return fmt.Errorf("failed to list projects: %w", err)
+	}
+
+	out := make([]responses.Project, len(projects))
+	for i, p := range projects {
+		out[i] = responses.Project{
+			ID:        p.ID,
+			Name:      p.Name,
+			ParentID:  p.ParentID,
+			CreatedAt: p.CreatedAt,
+			SortOrder: p.SortOrder,
+			ChatCount: p.ChatCount,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses.ProjectsResponse{Projects: out})
+	return nil
+}
+
+func (s *Server) createProjectHandler(w http.ResponseWriter, r *http.Request) error {
+	var req struct {
+		Name     string  `json:"name"`
+		ParentID *string `json:"parentId,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return fmt.Errorf("invalid request body: %w", err)
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return fmt.Errorf("project name is required")
+	}
+
+	var parent *string
+	if req.ParentID != nil && strings.TrimSpace(*req.ParentID) != "" {
+		p := strings.TrimSpace(*req.ParentID)
+		parent = &p
+	}
+
+	p, err := s.Store.CreateProject(name, parent)
+	if err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("parent project not found")
+		}
+		return fmt.Errorf("failed to create project: %w", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses.Project{
+		ID:        p.ID,
+		Name:      p.Name,
+		ParentID:  p.ParentID,
+		CreatedAt: p.CreatedAt,
+		SortOrder: p.SortOrder,
+		ChatCount: p.ChatCount,
+	})
+	return nil
+}
+
+func (s *Server) renameProjectHandler(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	if id == "" {
+		return fmt.Errorf("project ID is required")
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return fmt.Errorf("invalid request body: %w", err)
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return fmt.Errorf("project name is required")
+	}
+
+	if err := s.Store.RenameProject(id, name); err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("project not found")
+		}
+		return fmt.Errorf("failed to rename project: %w", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+func (s *Server) deleteProjectHandler(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	if id == "" {
+		return fmt.Errorf("project ID is required")
+	}
+
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "promote"
+	}
+	if mode != "promote" && mode != "delete" {
+		w.WriteHeader(http.StatusBadRequest)
+		return fmt.Errorf("invalid mode %q (expected promote or delete)", mode)
+	}
+
+	deleted, err := s.Store.DeleteProject(id, mode)
+	if err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("project not found")
+		}
+		return fmt.Errorf("failed to delete project: %w", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"deleted": deleted,
+		"mode":    mode,
+	})
+	return nil
+}
+
+func (s *Server) projectStatsHandler(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	if id == "" {
+		return fmt.Errorf("project ID is required")
+	}
+
+	chatCount, subprojectCount, err := s.Store.ProjectSubtreeStats(id)
+	if err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("project not found")
+		}
+		return fmt.Errorf("failed to get project stats: %w", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(responses.ProjectStats{
+		ChatCount:       chatCount,
+		SubprojectCount: subprojectCount,
+	})
+	return nil
+}
+
+func (s *Server) moveChatToProject(w http.ResponseWriter, r *http.Request) error {
+	cid := r.PathValue("id")
+	if cid == "" {
+		return fmt.Errorf("chat ID is required")
+	}
+
+	var req struct {
+		ProjectID *string `json:"projectId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return fmt.Errorf("invalid request body: %w", err)
+	}
+
+	if err := s.Store.MoveChatToProject(cid, req.ProjectID); err != nil {
+		if errors.Is(err, not.Found) {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("chat or project not found")
+		}
+		return fmt.Errorf("failed to move chat: %w", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+// ---------- Model routes (unchanged) ----------
+
 func (s *Server) checkModelUpstream(ctx context.Context, modelName string, timeout time.Duration) (string, int64, error) {
-	// Create a context with timeout for the registry check
 	checkCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Parse model name to get namespace, model, and tag
 	parts := strings.Split(modelName, ":")
 	name := parts[0]
 	tag := "latest"
@@ -490,11 +665,9 @@ func (s *Server) checkModelUpstream(ctx context.Context, modelName string, timeo
 	}
 
 	if !strings.Contains(name, "/") {
-		// If the model name does not contain a slash, assume it's a library model
 		name = "library/" + name
 	}
 
-	// Check the model in the Ollama registry using HEAD request
 	url := OllamaDotCom + "/v2/" + name + "/manifests/" + tag
 	req, err := http.NewRequestWithContext(checkCtx, "HEAD", url, nil)
 	if err != nil {
@@ -529,7 +702,6 @@ func (s *Server) checkModelUpstream(ctx context.Context, modelName string, timeo
 	return digest, pushTime, nil
 }
 
-// isNetworkError checks if an error string contains common network/connection error patterns
 func isNetworkError(errStr string) bool {
 	networkErrorPatterns := []string{
 		"connection refused",
@@ -603,7 +775,6 @@ func (s *Server) browserState(chat *store.Chat) (*responses.BrowserStateData, bo
 	return nil, false
 }
 
-// reconstructBrowserState (legacy): return the latest full browser state stored in messages.
 func reconstructBrowserState(messages []store.Message, defaultViewTokens int) *responses.BrowserStateData {
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
@@ -641,8 +812,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	createdChat := false
 
-	// if cid is the literal string "new", then we create a new chat before
-	// performing our normal actions
 	if cid == "new" {
 		u, err := uuid.NewV7()
 		if err != nil {
@@ -662,13 +831,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("empty model")
 	}
 
-	// Don't allow empty messages unless forceUpdate is true
 	if req.Prompt == "" && !req.ForceUpdate {
 		return fmt.Errorf("empty message")
 	}
 
 	if createdChat {
-		// send message to the client that the chat has been created
 		json.NewEncoder(w).Encode(responses.ChatEvent{
 			EventName: "chat_created",
 			ChatID:    &cid,
@@ -676,13 +843,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		flusher.Flush()
 	}
 
-	// Check if this is from a specific message index (e.g. for editing)
 	idx := -1
 	if req.Index != nil {
 		idx = *req.Index
 	}
 
-	// Load chat with attachments since we need them for processing
 	chat, err := s.Store.ChatWithOptions(cid, true)
 	if err != nil {
 		if !errors.Is(err, not.Found) {
@@ -691,12 +856,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		chat = store.NewChat(cid)
 	}
 
-	// Only add user message if not forceUpdate
 	if !req.ForceUpdate {
-		// Auto-unarchive / auto-restore: receiving a reply is the "signal"
-		// that a chat is back in active use. Mirrors Gmail/Photos behavior.
-		// Gated on !ForceUpdate because ForceUpdate is only a model refresh,
-		// not a user reply.
+		// Auto-unarchive / auto-restore: a reply is a signal the chat is back
+		// in active use. Gated on !ForceUpdate because ForceUpdate is a model
+		// refresh, not a user reply.
 		if chat.ArchivedAt != nil {
 			if err := s.Store.UnarchiveChat(cid); err != nil {
 				s.log().Warn("failed to auto-unarchive chat on reply", "error", err, "chat_id", cid)
@@ -718,10 +881,8 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 			for _, att := range req.Attachments {
 				if att.Data == "" {
-					// This is an existing file reference - keep it from the original message
 					if idx >= 0 && idx < len(chat.Messages) {
 						originalMessage := chat.Messages[idx]
-						// Find the file by filename in the original message
 						for _, originalFile := range originalMessage.Attachments {
 							if originalFile.Filename == att.Filename {
 								storeAttachments = append(storeAttachments, originalFile)
@@ -730,7 +891,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 						}
 					}
 				} else {
-					// This is a new file - decode base64 data
 					data, err := base64.StdEncoding.DecodeString(att.Data)
 					if err != nil {
 						s.log().Error("failed to decode attachment data", "error", err, "filename", att.Filename)
@@ -751,16 +911,26 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		userMsg := store.NewMessage("user", req.Prompt, messageOptions)
 
 		if idx >= 0 && idx < len(chat.Messages) {
-			// Generate from specified message: truncate and replace
 			chat.Messages = chat.Messages[:idx]
 			chat.Messages = append(chat.Messages, userMsg)
 		} else {
-			// Normal mode: append new message
 			chat.Messages = append(chat.Messages, userMsg)
 		}
 
 		if err := s.Store.SetChat(*chat); err != nil {
 			return err
+		}
+
+		// Associate with project on first message when the request carries a
+		// projectId and the chat is currently unfiled. Never moves an existing
+		// chat out of a project — that has to be done explicitly via the menu.
+		if req.ProjectID != nil && *req.ProjectID != "" && chat.ProjectID == nil {
+			pid := *req.ProjectID
+			if err := s.Store.MoveChatToProject(cid, &pid); err != nil {
+				s.log().Warn("failed to associate chat with project", "error", err, "chat_id", cid)
+			} else {
+				chat.ProjectID = &pid
+			}
 		}
 	}
 
@@ -776,17 +946,13 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Check if the model exists locally by trying to show it
 	_, err = c.Show(ctx, &api.ShowRequest{Model: req.Model})
 	if err != nil || req.ForceUpdate {
-		// Create an empty assistant message to store the model information
-		// This will be overwritten when the model responds
 		chat.Messages = append(chat.Messages, store.NewMessage("assistant", "", &store.MessageOptions{Model: req.Model}))
 		if err := s.Store.SetChat(*chat); err != nil {
 			cancelLoading()
 			return err
 		}
-		// Send download progress events while the model is being pulled
 		var largestDigest string
 		var largestTotal int64
 
@@ -831,7 +997,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		}
 		flusher.Flush()
 
-		// If forceUpdate, we're done after updating the model
 		if req.ForceUpdate {
 			json.NewEncoder(w).Encode(responses.ChatEvent{EventName: "done"})
 			flusher.Flush()
@@ -843,7 +1008,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 	loading = true
 	defer cancelLoading()
 
-	// Check the model capabilities
 	details, err := c.Show(ctx, &api.ShowRequest{Model: req.Model})
 
 	if err != nil || details == nil {
@@ -863,7 +1027,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		thinkValue = think
 	}
 
-	// Check if the last user message has attachments
 	hasAttachments := false
 	if len(chat.Messages) > 0 {
 		lastMsg := chat.Messages[len(chat.Messages)-1]
@@ -872,8 +1035,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// Check if agent or tools mode is enabled
-	// Note: Skip agent/tools mode if user has attachments, as the agent doesn't handle file attachments properly
 	registry := tools.NewRegistry()
 	var browser *tools.Browser
 
@@ -899,7 +1060,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 	var thinkingTimeStart *time.Time = nil
 	var thinkingTimeEnd *time.Time = nil
-	// Request-only assistant tool_calls buffer
 	var pendingAssistantToolCalls []store.ToolCall
 
 	passNum := 1
@@ -909,9 +1069,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 		availableTools := registry.AvailableTools()
 
-		// If we have pending assistant tool_calls and no assistant yet,
-		// build the request against a temporary chat that includes a
-		// request-only assistant with tool_calls inserted BEFORE tool messages
 		reqChat := chat
 		if len(pendingAssistantToolCalls) > 0 {
 			if len(chat.Messages) == 0 || chat.Messages[len(chat.Messages)-1].Role != "assistant" {
@@ -941,12 +1098,10 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 		err = c.Chat(ctx, chatReq, func(res api.ChatResponse) error {
 			if loading {
-				// Remove the loading indicator on first token
 				cancelLoading()
 				loading = false
 			}
 
-			// Start thinking timer on first thinking content or after tool call when thinking again
 			if res.Message.Thinking != "" && (thinkingTimeStart == nil || thinkingTimeEnd != nil) {
 				now := time.Now()
 				thinkingTimeStart = &now
@@ -992,8 +1147,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 					thinkingTimeEnd = nil
 				}
 
-				// attach tool_calls to an existing assistant if present,
-				// otherwise (for standalone web_search/web_fetch) buffer for request-only injection.
 				if len(res.Message.ToolCalls) > 0 {
 					if len(chat.Messages) > 0 && chat.Messages[len(chat.Messages)-1].Role == "assistant" {
 						toolCalls := make([]store.ToolCall, len(res.Message.ToolCalls))
@@ -1077,7 +1230,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 
 					var tr json.RawMessage
 					if strings.HasPrefix(toolCall.Function.Name, "browser.search") {
-						// For standalone web_search, ensure the tool message has readable content
+						// no-op
 					} else if strings.HasPrefix(toolCall.Function.Name, "browser") {
 						stateBytes, err := json.Marshal(browser.State())
 						if err != nil {
@@ -1136,7 +1289,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 				}
 
 			case EventChat:
-				// Append the new message to the chat history
 				if len(chat.Messages) == 0 || chat.Messages[len(chat.Messages)-1].Role != "assistant" {
 					newMsg := store.NewMessage("assistant", "", &store.MessageOptions{Model: req.Model})
 					chat.Messages = append(chat.Messages, newMsg)
@@ -1167,7 +1319,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 					return err
 				}
 			case EventThinking:
-				// Persist thinking content
 				if len(chat.Messages) == 0 || chat.Messages[len(chat.Messages)-1].Role != "assistant" {
 					newMsg := store.NewMessage("assistant", "", &store.MessageOptions{
 						Model:    req.Model,
@@ -1212,7 +1363,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		}
 
-		// If no tools were executed, exit the loop
 		if !toolsExecuted {
 			break
 		}
@@ -1220,7 +1370,6 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) error {
 		passNum++
 	}
 
-	// handle cases where thinking started but didn't finish
 	if thinkingTimeStart != nil && thinkingTimeEnd == nil {
 		now := time.Now()
 		thinkingTimeEnd = &now
@@ -1250,7 +1399,6 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 
 	chat, err := s.Store.Chat(cid)
 	if err != nil {
-		// Return empty chat if not found
 		data := responses.ChatResponse{
 			Chat: store.Chat{},
 		}
@@ -1259,7 +1407,6 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 		return nil //nolint:nilerr
 	}
 
-	// fill missing tool_name on tool messages (from previous tool_calls) so labels don’t flip after reload.
 	if chat != nil && len(chat.Messages) > 0 {
 		for i := range chat.Messages {
 			if chat.Messages[i].Role == "tool" && chat.Messages[i].ToolName == "" && chat.Messages[i].ToolResult != nil {
@@ -1280,7 +1427,6 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		browserState = reconstructBrowserState(chat.Messages, tools.DefaultViewTokens)
 	}
-	// clear the text and lines of all pages as it is not needed for rendering
 	if browserState != nil {
 		for _, page := range browserState.URLToPage {
 			page.Lines = nil
@@ -1313,27 +1459,21 @@ func (s *Server) renameChat(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("invalid request body: %w", err)
 	}
 
-	// Get the chat without loading attachments (we only need to update the title)
 	chat, err := s.Store.ChatWithOptions(cid, false)
 	if err != nil {
 		return fmt.Errorf("chat not found: %w", err)
 	}
 
-	// Update the title
 	chat.Title = req.Title
 	if err := s.Store.SetChat(*chat); err != nil {
 		return fmt.Errorf("failed to update chat: %w", err)
 	}
 
-	// Return the updated chat info
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(chatInfoFromChat(*chat))
 	return nil
 }
 
-// archiveChat sets archived_at on the chat, removing it from the active list
-// while keeping it fully readable. Idempotent: archiving an already-archived
-// chat just refreshes the timestamp.
 func (s *Server) archiveChat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	if cid == "" {
@@ -1352,7 +1492,6 @@ func (s *Server) archiveChat(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// unarchiveChat clears archived_at, returning the chat to the active list.
 func (s *Server) unarchiveChat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	if cid == "" {
@@ -1371,8 +1510,6 @@ func (s *Server) unarchiveChat(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// restoreChat clears deleted_at, moving a soft-deleted chat back into the
-// active list (or back into the archive if archived_at is still set).
 func (s *Server) restoreChat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	if cid == "" {
@@ -1391,7 +1528,6 @@ func (s *Server) restoreChat(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// purgeChat permanently deletes a soft-deleted chat and its images. Irreversible.
 func (s *Server) purgeChat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	if cid == "" {
@@ -1410,15 +1546,12 @@ func (s *Server) purgeChat(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// deleteChat soft-deletes: the chat moves to "Recently Deleted" for 30 days.
-// Idempotent: repeated DELETE calls do not reset the 30-day grace timer.
 func (s *Server) deleteChat(w http.ResponseWriter, r *http.Request) error {
 	cid := r.PathValue("id")
 	if cid == "" {
 		return fmt.Errorf("chat ID is required")
 	}
 
-	// Check if the chat exists (no need to load attachments)
 	chat, err := s.Store.ChatWithOptions(cid, false)
 	if err != nil {
 		if errors.Is(err, not.Found) {
@@ -1428,14 +1561,11 @@ func (s *Server) deleteChat(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("failed to get chat: %w", err)
 	}
 
-	// Already in trash: idempotent success without resetting the timestamp
-	// (otherwise repeated DELETE calls would extend the 30-day grace forever).
 	if chat.DeletedAt != nil {
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	// Soft-delete: chat moves to the recently-deleted list for 30 days.
 	if err := s.Store.DeleteChat(cid); err != nil {
 		return fmt.Errorf("failed to delete chat: %w", err)
 	}
@@ -1444,11 +1574,8 @@ func (s *Server) deleteChat(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// TODO(parthsareen): consolidate events within the function
 func chatEventFromApiChatResponse(res api.ChatResponse, thinkingTimeStart *time.Time, thinkingTimeEnd *time.Time) responses.ChatEvent {
-	// If there are tool calls, send assistant_with_tools event
 	if len(res.Message.ToolCalls) > 0 {
-		// Convert API tool calls to store tool calls
 		storeToolCalls := make([]store.ToolCall, len(res.Message.ToolCalls))
 		for i, tc := range res.Message.ToolCalls {
 			argsJSON, _ := json.Marshal(tc.Function.Arguments)
@@ -1480,7 +1607,6 @@ func chatEventFromApiChatResponse(res api.ChatResponse, thinkingTimeStart *time.
 		}
 	}
 
-	// Otherwise, send regular chat event
 	var content *string
 	if res.Message.Content != "" {
 		content = &res.Message.Content
@@ -1504,11 +1630,9 @@ func chatInfoFromChat(chat store.Chat) responses.ChatInfo {
 	var updatedAt time.Time
 
 	for _, msg := range chat.Messages {
-		// extract the first user message as the user excerpt
 		if msg.Role == "user" && userExcerpt == "" {
 			userExcerpt = msg.Content
 		}
-		// update the updated at time
 		if msg.UpdatedAt.After(updatedAt) {
 			updatedAt = msg.UpdatedAt
 		}
@@ -1522,6 +1646,7 @@ func chatInfoFromChat(chat store.Chat) responses.ChatInfo {
 		UpdatedAt:   updatedAt,
 		ArchivedAt:  chat.ArchivedAt,
 		DeletedAt:   chat.DeletedAt,
+		ProjectID:   chat.ProjectID,
 	}
 }
 
@@ -1531,17 +1656,14 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("failed to load settings: %w", err)
 	}
 
-	// set default models directory if not set
 	if settings.Models == "" {
 		settings.Models = envconfig.Models()
 	}
 
-	// set default context length if not set
 	if settings.ContextLength == 0 {
 		settings.ContextLength = 4096
 	}
 
-	// Include current runtime settings
 	settings.Agent = s.Agent
 	settings.Tools = s.Tools
 	settings.WorkingDir = s.WorkingDir
@@ -1648,11 +1770,6 @@ func userAgent() string {
 
 	version := buildinfo.Main.Version
 	if version == "(devel)" {
-		// When using `go run .` the version is "(devel)". This is seen
-		// as an invalid version by ollama.com and so it defaults to
-		// "needs upgrade" for some requests, such as pulls. These
-		// checks can be skipped by using the special version "v0.0.0",
-		// so we set it to that here.
 		version = "v0.0.0"
 	}
 
@@ -1665,7 +1782,6 @@ func userAgent() string {
 	)
 }
 
-// convertToOllamaTool converts a tool schema from our tools package format to Ollama API format
 func convertToOllamaTool(toolSchema map[string]any) api.Tool {
 	tool := api.Tool{
 		Type: "function",
@@ -1712,7 +1828,6 @@ func convertToOllamaTool(toolSchema map[string]any) api.Tool {
 	return tool
 }
 
-// getStringFromMap safely gets a string from a map
 func getStringFromMap(m map[string]any, key, defaultValue string) string {
 	if val, ok := m[key].(string); ok {
 		return val
@@ -1720,21 +1835,17 @@ func getStringFromMap(m map[string]any, key, defaultValue string) string {
 	return defaultValue
 }
 
-// isImageAttachment checks if a filename is an image file
 func isImageAttachment(filename string) bool {
 	ext := strings.ToLower(filename)
 	return strings.HasSuffix(ext, ".png") || strings.HasSuffix(ext, ".jpg") || strings.HasSuffix(ext, ".jpeg") || strings.HasSuffix(ext, ".webp")
 }
 
-// ptr is a convenience function for &literal
 func ptr[T any](v T) *T { return &v }
 
-// Browser tools simulate a full browser environment
 func supportsBrowserTools(model string) bool {
 	return strings.HasPrefix(strings.ToLower(model), "gpt-oss")
 }
 
-// Web search tools are simpler, providing only basic web search and fetch capabilities
 func supportsWebSearchTools(model string) bool {
 	model = strings.ToLower(model)
 	prefixes := []string{"qwen3", "deepseek-v3"}
@@ -1746,11 +1857,9 @@ func supportsWebSearchTools(model string) bool {
 	return false
 }
 
-// buildChatRequest converts store.Chat to api.ChatRequest
 func (s *Server) buildChatRequest(chat *store.Chat, model string, think any, availableTools []map[string]any) (*api.ChatRequest, error) {
 	var msgs []api.Message
 	for _, m := range chat.Messages {
-		// Skip empty messages if present
 		if m.Content == "" && m.Thinking == "" && len(m.ToolCalls) == 0 && len(m.Attachments) == 0 {
 			continue
 		}
@@ -1801,7 +1910,6 @@ func (s *Server) buildChatRequest(chat *store.Chat, model string, think any, ava
 			apiMsg.Content = m.Content
 			apiMsg.ToolName = m.ToolName
 		case "user", "system":
-			// User and system messages are handled normally
 		default:
 			s.log().Debug("unknown message role", "role", m.Role)
 		}
@@ -1811,7 +1919,6 @@ func (s *Server) buildChatRequest(chat *store.Chat, model string, think any, ava
 
 	var thinkValue *api.ThinkValue
 	if think != nil {
-		// Only set Think if it's actually requesting thinking
 		if boolValue, ok := think.(bool); ok {
 			if boolValue {
 				thinkValue = &api.ThinkValue{Value: boolValue}
