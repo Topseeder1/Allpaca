@@ -24,7 +24,7 @@
       "cacheVariables": {
         "CMAKE_CUDA_ARCHITECTURES": "50-virtual;60-virtual;61-virtual;70-virtual;75-virtual;80-virtual;86-virtual;87-virtual;89-virtual;90-virtual",
         "CMAKE_CUDA_FLAGS": "-Wno-deprecated-gpu-targets -t 2",
-        "OLLAMA_RUNNER_DIR": "cuda_v11"
+        "ALLPACA_RUNNER_DIR": "cuda_v11"
       }
     },
     {
@@ -33,7 +33,7 @@
       "cacheVariables": {
         "CMAKE_CUDA_ARCHITECTURES": "50;52;60;61;70;75;80;86;89;90;90a;120",
         "CMAKE_CUDA_FLAGS": "-Wno-deprecated-gpu-targets -t 2",
-        "OLLAMA_RUNNER_DIR": "cuda_v12"
+        "ALLPACA_RUNNER_DIR": "cuda_v12"
       }
     },
     {
@@ -42,7 +42,7 @@
       "cacheVariables": {
         "CMAKE_CUDA_ARCHITECTURES": "75;80;86;87;89;90;90a;100;103;110;120;121",
         "CMAKE_CUDA_FLAGS": "-t 4",
-        "OLLAMA_RUNNER_DIR": "cuda_v13"
+        "ALLPACA_RUNNER_DIR": "cuda_v13"
       }
     },
     {
@@ -50,7 +50,7 @@
       "inherits": [ "CUDA" ],
       "cacheVariables": {
         "CMAKE_CUDA_ARCHITECTURES": "72;87",
-        "OLLAMA_RUNNER_DIR": "cuda_jetpack5"
+        "ALLPACA_RUNNER_DIR": "cuda_jetpack5"
       }
     },
     {
@@ -58,7 +58,7 @@
       "inherits": [ "CUDA" ],
       "cacheVariables": {
         "CMAKE_CUDA_ARCHITECTURES": "87",
-        "OLLAMA_RUNNER_DIR": "cuda_jetpack6"
+        "ALLPACA_RUNNER_DIR": "cuda_jetpack6"
       }
     },
     {
@@ -74,14 +74,14 @@
       "cacheVariables": {
         "CMAKE_HIP_FLAGS": "-parallel-jobs=4",
         "AMDGPU_TARGETS": "gfx940;gfx941;gfx942;gfx1010;gfx1012;gfx1030;gfx1100;gfx1101;gfx1102;gfx1151;gfx1200;gfx1201;gfx908:xnack-;gfx90a:xnack+;gfx90a:xnack-",
-        "OLLAMA_RUNNER_DIR": "rocm"
+        "ALLPACA_RUNNER_DIR": "rocm"
       }
     },
     {
       "name": "Vulkan",
       "inherits": [ "Default" ],
       "cacheVariables": {
-        "OLLAMA_RUNNER_DIR": "vulkan"
+        "ALLPACA_RUNNER_DIR": "vulkan"
       }
     },
     {
@@ -89,21 +89,21 @@
       "inherits": [ "Default" ],
       "cacheVariables": {
         "MLX_ENGINE": "ON",
-        "OLLAMA_RUNNER_DIR": "mlx"
+        "ALLPACA_RUNNER_DIR": "mlx"
       }
     },
     {
       "name": "MLX CUDA 12",
       "inherits": [ "MLX", "CUDA 12" ],
       "cacheVariables": {
-        "OLLAMA_RUNNER_DIR": "mlx_cuda_v12"
+        "ALLPACA_RUNNER_DIR": "mlx_cuda_v12"
       }
     },
     {
       "name": "MLX CUDA 13",
       "inherits": [ "MLX", "CUDA 13" ],
       "cacheVariables": {
-        "OLLAMA_RUNNER_DIR": "mlx_cuda_v13"
+        "ALLPACA_RUNNER_DIR": "mlx_cuda_v13"
       }
     }
   ],

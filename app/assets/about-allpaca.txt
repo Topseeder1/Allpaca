@@ -1,0 +1,38 @@
+Allpaca — A Seedling Remix
+==========================
+
+Allpaca runs large language models entirely on your own machine. It is a
+Seedling Remix of Ollama — not a reskin, but a bespoke, re-engineered
+inference engine built for the Spaces ecosystem.
+
+WHAT IT DOES
+------------
+  • Runs large language models locally on your hardware, with no cloud
+    account required.
+  • GPU acceleration for NVIDIA (CUDA), AMD (ROCm) and Vulkan, plus a
+    full set of tuned CPU backends.
+  • A desktop chat app with conversations, nested projects, an archive,
+    and a 30-day Recently Deleted trash you can restore from.
+  • Real-time token streaming and a built-in model library manager.
+
+WHAT SPACES IS
+--------------
+Spaces is Seedling's ecosystem launcher — one window that hosts a whole
+family of AI tools, tracks what is installed and running, and routes
+their inference through a single local gateway. Allpaca is one of the apps
+you launch inside Spaces.
+
+WHAT ARRP IS
+------------
+ArrP (the ArrP Protocol) is the engine underneath Spaces. It watches your
+hardware, decides what can run in parallel and what has to queue, and
+streams model output over a local port. Spaces is the UI; ArrP is the
+router; Allpaca is the Remix.
+
+A SEEDLING REMIX
+----------------
+A Remix is Seedling's published rendition of an upstream tool — rebuilt,
+hardened and upgraded, the way a coachbuilder reworks a chassis. Allpaca
+is not stock Ollama. It is a distinct product, published by Seedling.
+
+Learn more:  https://spacesbyseedling.com/remixes

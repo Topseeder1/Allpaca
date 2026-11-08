@@ -87,21 +87,21 @@ function checkEnv {
         ${script:SignTool}=${env:SIGN_TOOL}
     }
     if ("${env:KEY_CONTAINER}") {
-        ${script:OLLAMA_CERT}=$(resolve-path "${script:SRC_DIR}\ollama_inc.crt")
+        ${script:ALLPACA_CERT}=$(resolve-path "${script:SRC_DIR}\allpaca_inc.crt")
         Write-host "Code signing enabled"
     } else {
-        write-host "Code signing disabled - please set KEY_CONTAINERS to sign and copy ollama_inc.crt to the top of the source tree"
+        write-host "Code signing disabled - please set KEY_CONTAINERS to sign and copy allpaca_inc.crt to the top of the source tree"
     }
     $script:JOBS=([Environment]::ProcessorCount)
 
     # Preflight: a running exe is locked by Windows and cannot be replaced by
     # the build. Fail fast here with clear instructions instead of failing
     # silently mid-step.
-    $running = Get-Process -Name allpaca,allpaca-app,windows-ollama-app-amd64 -ErrorAction SilentlyContinue
+    $running = Get-Process -Name allpaca,allpaca-app,windows-allpaca-app-amd64 -ErrorAction SilentlyContinue
     if ($running) {
         write-host "Build stopped: the app or server is currently running and its exe is locked."
         write-host "Stop the running instances first, then rerun this script:"
-        write-host "  taskkill /im windows-ollama-app-amd64.exe /f"
+        write-host "  taskkill /im windows-allpaca-app-amd64.exe /f"
         write-host "  taskkill /im allpaca.exe /f"
         exit 1
     }
@@ -111,7 +111,10 @@ function cpu {
     mkdir -Force -path "${script:DIST_DIR}\" | Out-Null
     if ($script:ARCH -ne "arm64") {
         Remove-Item -ea 0 -recurse -force -path "${script:SRC_DIR}\dist\windows-${script:ARCH}"
-        New-Item "${script:SRC_DIR}\dist\windows-${script:ARCH}\lib\ollama\" -ItemType Directory -ea 0
+        # Pre-create the install directory. cmake --install will create it too,
+        # but doing it here keeps the path shape visible in the build script and
+        # guarantees it exists before the ggml-cpu install step runs.
+        New-Item "${script:SRC_DIR}\dist\windows-${script:ARCH}\lib\allpaca\" -ItemType Directory -ea 0
 
         & cmake -B build\cpu --preset CPU --install-prefix $script:DIST_DIR
         if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
@@ -221,7 +224,7 @@ function rocm {
             if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
             & cmake --install build\rocm --component "HIP" --strip
             if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
-            Remove-Item -Path $script:DIST_DIR\lib\ollama\rocm\rocblas\library\*gfx906* -ErrorAction SilentlyContinue
+            Remove-Item -Path $script:DIST_DIR\lib\allpaca\rocm\rocblas\library\*gfx906* -ErrorAction SilentlyContinue
         } else {
             write-host "ROCm not detected, skipping"
         }
@@ -298,7 +301,7 @@ function app {
 
     $distFiles = Get-ChildItem "dist" -Recurse
     if ($distFiles.Count -eq 0) {
-        write-host "ERROR: dist directory is empty after npm run build"
+        write-host "ERROR: dist directory was empty after npm run build"
         exit 1
     }
 
@@ -307,7 +310,7 @@ function app {
     write-host "Running go generate"
     & go generate ./...
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
-    & go build -trimpath -ldflags "-s -w -H windowsgui -X=github.com/topseeder1/allpaca/app/version.Version=$script:VERSION" -o .\dist\windows-ollama-app-${script:ARCH}.exe ./app/cmd/app/
+    & go build -trimpath -ldflags "-s -w -H windowsgui -X=github.com/topseeder1/allpaca/app/version.Version=$script:VERSION" -o .\dist\windows-allpaca-app-${script:ARCH}.exe ./app/cmd/app/
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
@@ -322,8 +325,8 @@ function deps {
 
 function sign {
     if ("${env:KEY_CONTAINER}") {
-        write-host "Signing Ollama executables, scripts and libraries"
-        & "${script:SignTool}" sign /v /fd sha256 /t http://timestamp.digicert.com /f "${script:OLLAMA_CERT}" `
+        write-host "Signing Allpaca executables, scripts and libraries"
+        & "${script:SignTool}" sign /v /fd sha256 /t http://timestamp.digicert.com /f "${script:ALLPACA_CERT}" `
             /csp "Google Cloud KMS Provider" /kc ${env:KEY_CONTAINER} `
             $(get-childitem -path "${script:SRC_DIR}\dist\windows-*" -r -include @('*.exe', '*.dll'))
         if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
@@ -337,39 +340,39 @@ function installer {
         write-host "ERROR: missing Inno Setup installation directory - install from https://jrsoftware.org/isdl.php"
         exit 1
     }
-    write-host "Building Ollama Installer"
+    write-host "Building Allpaca Installer"
     cd "${script:SRC_DIR}\app"
     $env:PKG_VERSION=$script:PKG_VERSION
     if ("${env:KEY_CONTAINER}") {
-        & "${script:INNO_SETUP_DIR}\ISCC.exe" /DARCH=$script:TARGET_ARCH /SMySignTool="${script:SignTool} sign /fd sha256 /t http://timestamp.digicert.com /f ${script:OLLAMA_CERT} /csp `$qGoogle Cloud KMS Provider`$q /kc ${env:KEY_CONTAINER} `$f" .\ollama.iss
+        & "${script:INNO_SETUP_DIR}\ISCC.exe" /DARCH=$script:TARGET_ARCH /SMySignTool="${script:SignTool} sign /fd sha256 /t http://timestamp.digicert.com /f ${script:ALLPACA_CERT} /csp `$qGoogle Cloud KMS Provider`$q /kc ${env:KEY_CONTAINER} `$f" .\allpaca.iss
     } else {
-        & "${script:INNO_SETUP_DIR}\ISCC.exe" /DARCH=$script:TARGET_ARCH .\ollama.iss
+        & "${script:INNO_SETUP_DIR}\ISCC.exe" /DARCH=$script:TARGET_ARCH .\allpaca.iss
     }
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
 function zip {
     if (Test-Path -Path "${script:SRC_DIR}\dist\windows-amd64") {
-        if (Test-Path -Path "${script:SRC_DIR}\dist\windows-amd64\lib\ollama\rocm") {
-            write-host "Generating stand-alone distribution zip file ${script:SRC_DIR}\dist\ollama-windows-amd64-rocm.zip"
+        if (Test-Path -Path "${script:SRC_DIR}\dist\windows-amd64\lib\allpaca\rocm") {
+            write-host "Generating stand-alone distribution zip file ${script:SRC_DIR}\dist\allpaca-windows-amd64-rocm.zip"
             # Temporarily adjust paths so we can retain the same directory structure
             Remove-Item -ea 0 -r "${script:SRC_DIR}\dist\windows-amd64-rocm"
-            mkdir -Force -path "${script:SRC_DIR}\dist\windows-amd64-rocm\lib\ollama"
-            Write-Output "Extract this ROCm zip file to the same location where you extracted ollama-windows-amd64.zip" > "${script:SRC_DIR}\dist\windows-amd64-rocm\README.txt"
-            Move-Item -path "${script:SRC_DIR}\dist\windows-amd64\lib\ollama\rocm" -destination "${script:SRC_DIR}\dist\windows-amd64-rocm\lib\ollama"
-            Compress-Archive -CompressionLevel Optimal -Path "${script:SRC_DIR}\dist\windows-amd64-rocm\*" -DestinationPath "${script:SRC_DIR}\dist\ollama-windows-amd64-rocm.zip" -Force
+            mkdir -Force -path "${script:SRC_DIR}\dist\windows-amd64-rocm\lib\allpaca"
+            Write-Output "Extract this ROCm zip file to the same location where you extracted allpaca-windows-amd64.zip" > "${script:SRC_DIR}\dist\windows-amd64-rocm\README.txt"
+            Move-Item -path "${script:SRC_DIR}\dist\windows-amd64\lib\allpaca\rocm" -destination "${script:SRC_DIR}\dist\windows-amd64-rocm\lib\allpaca"
+            Compress-Archive -CompressionLevel Optimal -Path "${script:SRC_DIR}\dist\windows-amd64-rocm\*" -DestinationPath "${script:SRC_DIR}\dist\allpaca-windows-amd64-rocm.zip" -Force
         }
 
-        write-host "Generating stand-alone distribution zip file ${script:SRC_DIR}\dist\ollama-windows-amd64.zip"
-        Compress-Archive -CompressionLevel Optimal -Path "${script:SRC_DIR}\dist\windows-amd64\*" -DestinationPath "${script:SRC_DIR}\dist\ollama-windows-amd64.zip" -Force
+        write-host "Generating stand-alone distribution zip file ${script:SRC_DIR}\dist\allpaca-windows-amd64.zip"
+        Compress-Archive -CompressionLevel Optimal -Path "${script:SRC_DIR}\dist\windows-amd64\*" -DestinationPath "${script:SRC_DIR}\dist\allpaca-windows-amd64.zip" -Force
         if (Test-Path -Path "${script:SRC_DIR}\dist\windows-amd64-rocm") {
-            Move-Item -destination "${script:SRC_DIR}\dist\windows-amd64\lib\ollama\rocm" -path "${script:SRC_DIR}\dist\windows-amd64-rocm\lib\ollama\rocm"
+            Move-Item -destination "${script:SRC_DIR}\dist\windows-amd64\lib\allpaca\rocm" -path "${script:SRC_DIR}\dist\windows-amd64-rocm\lib\allpaca\rocm"
         }
     }
 
     if (Test-Path -Path "${script:SRC_DIR}\dist\windows-arm64") {
-        write-host "Generating stand-alone distribution zip file ${script:SRC_DIR}\dist\ollama-windows-arm64.zip"
-        Compress-Archive -CompressionLevel Optimal -Path "${script:SRC_DIR}\dist\windows-arm64\*" -DestinationPath "${script:SRC_DIR}\dist\ollama-windows-arm64.zip" -Force
+        write-host "Generating stand-alone distribution zip file ${script:SRC_DIR}\dist\allpaca-windows-arm64.zip"
+        Compress-Archive -CompressionLevel Optimal -Path "${script:SRC_DIR}\dist\windows-arm64\*" -DestinationPath "${script:SRC_DIR}\dist\allpaca-windows-arm64.zip" -Force
     }
 }
 

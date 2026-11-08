@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Ollama C CXX)
+# Allpaca — bespoke inference engine built from the llama.cpp/ggml stack.
+#
+# The install tree uses lib/allpaca for GPU backend libraries. The Go
+# runtime resolver (ml/backend/ggml/ggml/src/ggml.go — OnceLoad) and the
+# Windows build/packaging chain (scripts/build_windows.ps1, app/allpaca.iss)
+# all reference that same path. Changing one without the others ships an
+# app that installs successfully and then can't find its own backends.
+project(Allpaca C CXX)
 
 # Handle cross-compilation on macOS: when CMAKE_OSX_ARCHITECTURES is set to a
 # single architecture different from the host, override CMAKE_SYSTEM_PROCESSOR
@@ -54,15 +61,20 @@ if(APPLE)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 endif()
 
-set(OLLAMA_BUILD_DIR ${CMAKE_BINARY_DIR}/lib/ollama)
-set(OLLAMA_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/lib/ollama/${OLLAMA_RUNNER_DIR})
+# Backend subdirectory name provided by CMakePresets (e.g. "cuda_v12", "rocm",
+# "vulkan"). The resulting install path is always
+#   <prefix>/lib/allpaca/<runner-dir>
+# The Go resolver in ml/backend/ggml/ggml/src/ggml.go looks for backends under
+# lib/allpaca and will not find anything in lib/ollama or the base directory.
+set(ALLPACA_BUILD_DIR ${CMAKE_BINARY_DIR}/lib/allpaca)
+set(ALLPACA_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/lib/allpaca/${ALLPACA_RUNNER_DIR})
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY         ${OLLAMA_BUILD_DIR})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${OLLAMA_BUILD_DIR})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${OLLAMA_BUILD_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY         ${OLLAMA_BUILD_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG   ${OLLAMA_BUILD_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${OLLAMA_BUILD_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY         ${ALLPACA_BUILD_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${ALLPACA_BUILD_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${ALLPACA_BUILD_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY         ${ALLPACA_BUILD_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG   ${ALLPACA_BUILD_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${ALLPACA_BUILD_DIR})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/ml/backend/ggml/ggml/src/include)
@@ -113,9 +125,9 @@ endif()
 install(TARGETS ggml-base ${CPU_VARIANTS}
     RUNTIME_DEPENDENCIES
         PRE_EXCLUDE_REGEXES ".*"
-    RUNTIME DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT CPU
-    LIBRARY DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT CPU
-    FRAMEWORK DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT CPU
+    RUNTIME DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT CPU
+    LIBRARY DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT CPU
+    FRAMEWORK DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT CPU
 )
 
 check_language(CUDA)
@@ -134,8 +146,8 @@ if(CMAKE_CUDA_COMPILER)
             DIRECTORIES ${CUDAToolkit_BIN_DIR} ${CUDAToolkit_BIN_DIR}/x64 ${CUDAToolkit_LIBRARY_DIR}
             PRE_INCLUDE_REGEXES cublas cublasLt cudart
             PRE_EXCLUDE_REGEXES ".*"
-        RUNTIME DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT CUDA
-        LIBRARY DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT CUDA
+        RUNTIME DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT CUDA
+        LIBRARY DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT CUDA
     )
 endif()
 
@@ -170,21 +182,21 @@ if(CMAKE_HIP_COMPILER)
 
         install(TARGETS ggml-hip
             RUNTIME_DEPENDENCY_SET rocm
-            RUNTIME DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT HIP
-            LIBRARY DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT HIP
+            RUNTIME DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT HIP
+            LIBRARY DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT HIP
         )
         install(RUNTIME_DEPENDENCY_SET rocm
                 DIRECTORIES ${HIP_BIN_INSTALL_DIR} ${HIP_LIB_INSTALL_DIR}
                 PRE_INCLUDE_REGEXES hipblas rocblas amdhip64 rocsolver amd_comgr hsa-runtime64 rocsparse tinfo rocprofiler-register drm drm_amdgpu numa elf
                 PRE_EXCLUDE_REGEXES ".*"
                 POST_EXCLUDE_REGEXES "system32"
-            RUNTIME DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT HIP
-            LIBRARY DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT HIP
+            RUNTIME DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT HIP
+            LIBRARY DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT HIP
         )
 
         foreach(HIP_LIB_BIN_INSTALL_DIR IN ITEMS ${HIP_BIN_INSTALL_DIR} ${HIP_LIB_INSTALL_DIR})
             if(EXISTS ${HIP_LIB_BIN_INSTALL_DIR}/rocblas)
-                install(DIRECTORY ${HIP_LIB_BIN_INSTALL_DIR}/rocblas DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT HIP)
+                install(DIRECTORY ${HIP_LIB_BIN_INSTALL_DIR}/rocblas DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT HIP)
                 break()
             endif()
         endforeach()
@@ -200,8 +212,8 @@ if(NOT APPLE)
             RUNTIME_DEPENDENCIES
                 PRE_INCLUDE_REGEXES vulkan
                 PRE_EXCLUDE_REGEXES ".*"
-            RUNTIME DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT Vulkan
-            LIBRARY DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT Vulkan
+            RUNTIME DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT Vulkan
+            LIBRARY DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT Vulkan
         )
     endif()
 endif()
@@ -220,16 +232,16 @@ if(MLX_ENGINE)
             DIRECTORIES ${CUDAToolkit_BIN_DIR} ${CUDAToolkit_BIN_DIR}/x64 ${CUDAToolkit_LIBRARY_DIR}
             PRE_INCLUDE_REGEXES cublas cublasLt cudart nvrtc nvrtc-builtins cudnn nccl openblas gfortran
             PRE_EXCLUDE_REGEXES ".*"
-        RUNTIME DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT MLX
-        LIBRARY DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT MLX
-        FRAMEWORK DESTINATION ${OLLAMA_INSTALL_DIR} COMPONENT MLX
+        RUNTIME DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT MLX
+        LIBRARY DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT MLX
+        FRAMEWORK DESTINATION ${ALLPACA_INSTALL_DIR} COMPONENT MLX
     )
 
     # Install the Metal library for macOS arm64 (must be colocated with the binary)
     # Metal backend is only built for arm64, not x86_64
     if(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
         install(FILES ${CMAKE_BINARY_DIR}/_deps/mlx-build/mlx/backend/metal/kernels/mlx.metallib
-            DESTINATION ${OLLAMA_INSTALL_DIR}
+            DESTINATION ${ALLPACA_INSTALL_DIR}
             COMPONENT MLX)
     endif()
 
@@ -240,7 +252,7 @@ if(MLX_ENGINE)
             "${CUDAToolkit_LIBRARY_DIR}/libcublas.so*")
         if(CUDART_LIBS)
             install(FILES ${CUDART_LIBS}
-                DESTINATION ${OLLAMA_INSTALL_DIR}
+                DESTINATION ${ALLPACA_INSTALL_DIR}
                 COMPONENT MLX)
         endif()
     endif()

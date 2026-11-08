@@ -58,20 +58,28 @@ var OnceLoad = sync.OnceFunc(func() {
 		exe = "."
 	}
 
+	// Default backend library search path. Must match where CMake installs
+	// the ggml backend libraries (see set(OLLAMA_INSTALL_DIR ...) in the
+	// root CMakeLists.txt and the destdir in scripts/build_windows.ps1 /
+	// app/allpaca.iss).
 	var value string
 	switch runtime.GOOS {
 	case "darwin":
+		// macOS bundles place dylibs directly under Frameworks/, alongside the
+		// .app binary's Contents/MacOS/ directory, so no extra lib/ component.
 		value = filepath.Dir(exe)
 	case "windows":
-		value = filepath.Join(filepath.Dir(exe), "lib", "ollama")
+		value = filepath.Join(filepath.Dir(exe), "lib", "allpaca")
 	default:
-		value = filepath.Join(filepath.Dir(exe), "..", "lib", "ollama")
+		value = filepath.Join(filepath.Dir(exe), "..", "lib", "allpaca")
 	}
 
-	// Avoid potentially loading incompatible GGML libraries
-	paths, ok := os.LookupEnv("OLLAMA_LIBRARY_PATH")
+	// ALLPACA_LIBRARY_PATH overrides the default search path. Use
+	// filepath.SplitList so a path list (colon or semicolon separated,
+	// OS-dependent) is handled correctly.
+	paths, ok := os.LookupEnv("ALLPACA_LIBRARY_PATH")
 	if !ok {
-		slog.Debug("OLLAMA_LIBRARY_PATH not set, falling back to default", "search", value)
+		slog.Debug("ALLPACA_LIBRARY_PATH not set, falling back to default", "search", value)
 		paths = value
 	}
 
@@ -84,8 +92,12 @@ var OnceLoad = sync.OnceFunc(func() {
 			continue
 		}
 
-		if abspath != filepath.Dir(exe) && !strings.Contains(abspath, filepath.FromSlash("lib/ollama")) {
-			slog.Debug("skipping path which is not part of ollama", "path", abspath)
+		// The guard below rejects any path that doesn't look like it belongs
+		// to our install tree. It MUST use the same lib/<name> segment as the
+		// path construction above, or every path will be rejected and no GPU
+		// backends will load.
+		if abspath != filepath.Dir(exe) && !strings.Contains(abspath, filepath.FromSlash("lib/allpaca")) {
+			slog.Debug("skipping path which is not part of allpaca", "path", abspath)
 			continue
 		}
 
