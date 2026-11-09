@@ -12,7 +12,7 @@
 #if GetEnv("PKG_VERSION") != ""
   #define MyAppVersion GetEnv("PKG_VERSION")
 #else
-  #define MyAppVersion "0.1.0"
+  #define MyAppVersion "0.1.1"
 #endif
 #define MyAppPublisher "Seedling"
 #define MyAppURL "https://spacesbyseedling.com/remixes"

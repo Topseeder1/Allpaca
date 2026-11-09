@@ -53,6 +53,13 @@ function AnimatedDots() {
 
 const savedConfirmationDuration = 3000;
 
+// TEMPORARY: hides the "Ollama account" card from Settings.
+// Flip to `true` to restore. Kept as a flag (rather than a commented-out JSX
+// block) so the handlers/hooks below stay referenced and the build/lint does
+// not fail on unused locals. The account gate itself is still enforced in
+// ChatForm.tsx and DisplayLogin.tsx — this only removes the UI surface.
+const SHOW_OLLAMA_ACCOUNT: boolean = false;
+
 export default function Settings() {
   const queryClient = useQueryClient();
   const [showSaved, setShowSaved] = useState(false);
@@ -406,125 +413,130 @@ export default function Settings() {
             ))}
           </div>
 
-          {/* Connect Ollama Account */}
-          <div className="overflow-hidden rounded-xl bg-surface-raised">
-            <div className="p-4">
-              <Field>
-                {isLoading ? (
-                  // Loading skeleton, this will only happen if the app started recently
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <div className="h-4 bg-border rounded animate-pulse w-24"></div>
-                      <div className="h-3 bg-border rounded animate-pulse w-32"></div>
-                    </div>
-                    <div className="h-10 w-10 bg-border rounded-full animate-pulse"></div>
-                  </div>
-                ) : user && user.name ? (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <Label className="text-sm font-medium text-fg">
-                          {user?.name}
-                        </Label>
+          {/* Connect Ollama Account — temporarily hidden, see SHOW_OLLAMA_ACCOUNT */}
+          {SHOW_OLLAMA_ACCOUNT && (
+            <div className="overflow-hidden rounded-xl bg-surface-raised">
+              <div className="p-4">
+                <Field>
+                  {isLoading ? (
+                    // Loading skeleton, this will only happen if the app started recently
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-2">
+                        <div className="h-4 bg-border rounded animate-pulse w-24"></div>
+                        <div className="h-3 bg-border rounded animate-pulse w-32"></div>
                       </div>
-                      <Description className="text-sm text-fg-muted">
-                        {user?.email}
-                      </Description>
-                      <div className="flex items-center space-x-2 mt-2">
-                        {user?.plan === "free" && (
+                      <div className="h-10 w-10 bg-border rounded-full animate-pulse"></div>
+                    </div>
+                  ) : user && user.name ? (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <Label className="text-sm font-medium text-fg">
+                            {user?.name}
+                          </Label>
+                        </div>
+                        <Description className="text-sm text-fg-muted">
+                          {user?.email}
+                        </Description>
+                        <div className="flex items-center space-x-2 mt-2">
+                          {user?.plan === "free" && (
+                            <Button
+                              type="button"
+                              color="dark"
+                              className="px-3 py-2 text-sm font-medium bg-black/90 backdrop-blur-sm text-white rounded-lg border border-white/10 shadow-2xl transition-all duration-300 ease-out relative overflow-hidden group"
+                              onClick={() =>
+                                window.open(
+                                  "https://ollama.com/upgrade",
+                                  "_blank",
+                                )
+                              }
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-green-500/20 opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-out"></div>
+                              <span className="relative z-10 flex items-center space-x-2">
+                                <span>Upgrade</span>
+                              </span>
+                            </Button>
+                          )}
                           <Button
                             type="button"
-                            color="dark"
-                            className="px-3 py-2 text-sm font-medium bg-black/90 backdrop-blur-sm text-white rounded-lg border border-white/10 shadow-2xl transition-all duration-300 ease-out relative overflow-hidden group"
+                            color="white"
+                            className="px-3 py-2 text-sm"
                             onClick={() =>
                               window.open(
-                                "https://ollama.com/upgrade",
+                                "https://ollama.com/settings",
                                 "_blank",
                               )
                             }
                           >
-                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-green-500/20 opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-out"></div>
-                            <span className="relative z-10 flex items-center space-x-2">
-                              <span>Upgrade</span>
-                            </span>
+                            Manage
                           </Button>
-                        )}
-                        <Button
-                          type="button"
-                          color="white"
-                          className="px-3 py-2 text-sm"
-                          onClick={() =>
-                            window.open("https://ollama.com/settings", "_blank")
-                          }
-                        >
-                          Manage
-                        </Button>
-                        <Button
-                          type="button"
-                          color="zinc"
-                          className="px-3 py-2 text-sm"
-                          onClick={() => void handleDisconnectOllamaAccount()}
-                        >
-                          Sign out
-                        </Button>
+                          <Button
+                            type="button"
+                            color="zinc"
+                            className="px-3 py-2 text-sm"
+                            onClick={() => void handleDisconnectOllamaAccount()}
+                          >
+                            Sign out
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    {user?.avatarurl && (
-                      <img
-                        src={user.avatarurl}
-                        alt={user?.name}
-                        className="h-10 w-10 rounded-full bg-border flex-shrink-0"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.className = "hidden";
-                        }}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Ollama account</Label>
-                      <Description>Not connected</Description>
-                    </div>
-                    <Button
-                      type="button"
-                      color="white"
-                      onClick={handleConnectOllamaAccount}
-                      disabled={isRefreshing || isAwaitingConnection}
-                    >
-                      {isRefreshing || isAwaitingConnection ? (
-                        <AnimatedDots />
-                      ) : (
-                        "Sign In"
+                      {user?.avatarurl && (
+                        <img
+                          src={user.avatarurl}
+                          alt={user?.name}
+                          className="h-10 w-10 rounded-full bg-border flex-shrink-0"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.className = "hidden";
+                          }}
+                        />
                       )}
-                    </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Ollama account</Label>
+                        <Description>Not connected</Description>
+                      </div>
+                      <Button
+                        type="button"
+                        color="white"
+                        onClick={handleConnectOllamaAccount}
+                        disabled={isRefreshing || isAwaitingConnection}
+                      >
+                        {isRefreshing || isAwaitingConnection ? (
+                          <AnimatedDots />
+                        ) : (
+                          "Sign In"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </Field>
+                {connectionError && (
+                  <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <Text className="text-sm text-red-600 dark:text-red-400">
+                      {connectionError}
+                    </Text>
                   </div>
                 )}
-              </Field>
-              {connectionError && (
-                <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <Text className="text-sm text-red-600 dark:text-red-400">
-                    {connectionError}
-                  </Text>
-                </div>
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Local Configuration */}
           <div className="relative overflow-hidden rounded-xl bg-surface-raised">
             <div className="space-y-4 p-4">
-              {/* Expose Ollama */}
+              {/* Expose Allpaca */}
               <Field>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start space-x-3 flex-1">
                     <WifiIcon className="mt-1 h-5 w-5 flex-shrink-0 text-fg" />
                     <div>
-                      <Label>Expose Ollama to the network</Label>
+                      <Label>Expose Allpaca to the network</Label>
                       <Description>
-                        Allow other devices or services to access Ollama.
+                        Allow other devices or services to access Allpaca.
                       </Description>
                     </div>
                   </div>
