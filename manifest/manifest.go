@@ -134,7 +134,14 @@ func resolveManifest(n model.Name) (*Manifest, modelRoot, error) {
 
 		m.filepath = p
 		m.fi = fi
-		m.digest = hex.EncodeToString(sha256sum.Sum(nil))
+		// The digest must carry the "sha256:" prefix to match what ollama.com
+		// returns in the ollama-content-digest header (see checkModelUpstream in
+		// app/ui/ui.go). Bare hex here makes every model compare unequal against
+		// the registry digest, which lights up the "newer version available"
+		// badge for models that are actually current. Ollama's own client uses
+		// the prefixed form; this restores that behavior after the fork's
+		// rewrite dropped it.
+		m.digest = "sha256:" + hex.EncodeToString(sha256sum.Sum(nil))
 		m.origin = root.origin
 
 		return &m, root, nil

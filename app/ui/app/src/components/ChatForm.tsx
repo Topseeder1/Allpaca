@@ -30,6 +30,16 @@ import { PlusIcon } from "@heroicons/react/24/outline";
 
 export type ThinkingLevel = "low" | "medium" | "high";
 
+// Web search is served by ollama.com's servers behind an Ollama account —
+// it is not a local tool. Allpaca does not sign in to any remote provider,
+// so the feature has no working backend today. The whole implementation
+// (tools.WebSearch, tools.WebFetch, the server-side tool registry wiring in
+// chat()) is intentionally left in place; only the UI entry point is hidden.
+// Flip this to true once a real provider (Brave / Tavily / self-hosted
+// SearXNG) is wired into app/tools/web_search.go — nothing else needs to
+// change for the toggle to come back.
+const WEB_SEARCH_UI_ENABLED = false;
+
 interface FileAttachment {
   filename: string;
   data: Uint8Array;
@@ -154,6 +164,15 @@ function ChatForm({
     modelLower.startsWith("gpt-oss") ||
     modelLower.startsWith("qwen3") ||
     modelLower.startsWith("deepseek-v3");
+
+  // Whether the web search control is actually offered to the user. Requires
+  // the build-level flag (see WEB_SEARCH_UI_ENABLED above), a model that can
+  // call the tools, and airplane mode off. Used for both the button's
+  // visibility and the request flag, so a stale `webSearchEnabled: true` left
+  // over in settings can never send a request to a backend we can't reach.
+  const webSearchAvailable =
+    WEB_SEARCH_UI_ENABLED && supportsWebSearch && !airplaneMode;
+
   // Use per-chat thinking level instead of global
   const thinkLevel: ThinkingLevel =
     settingsThinkLevel === "none" || !settingsThinkLevel
@@ -236,7 +255,7 @@ function ChatForm({
   const shouldShowLoginBanner =
     !isLoadingUser &&
     !isAuthenticated &&
-    ((webSearchEnabled && supportsWebSearch) ||
+    ((WEB_SEARCH_UI_ENABLED && webSearchEnabled && supportsWebSearch) ||
       (selectedModel?.isCloud() && !airplaneMode));
 
   // Determine which feature to highlight in the banner
@@ -245,7 +264,7 @@ function ChatForm({
       if (loginPromptFeature) return loginPromptFeature;
       if (webSearchEnabled && selectedModel?.isCloud() && !airplaneMode)
         return "webSearch";
-      if (webSearchEnabled) return "webSearch";
+      if (WEB_SEARCH_UI_ENABLED && webSearchEnabled) return "webSearch";
       if (selectedModel?.isCloud() && !airplaneMode) return "turbo";
     }
     return null;
@@ -478,7 +497,9 @@ function ChatForm({
       }),
     );
 
-    const useWebSearch = supportsWebSearch && webSearchEnabled && !airplaneMode;
+    // Never request web search while the toggle is hidden — a stale true value
+    // in settings would otherwise send the request to a backend we can't reach.
+    const useWebSearch = webSearchAvailable && webSearchEnabled;
     const useThink = modelSupportsThinkingLevels
       ? thinkLevel
       : supportsThinkToggling
@@ -899,7 +920,7 @@ function ChatForm({
                 )}
                 <WebSearchButton
                   ref={webSearchButtonRef}
-                  isVisible={supportsWebSearch && airplaneMode === false}
+                  isVisible={webSearchAvailable}
                   isActive={webSearchEnabled}
                   onToggle={() => {
                     if (!webSearchEnabled && !isAuthenticated) {
