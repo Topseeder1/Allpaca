@@ -29,7 +29,6 @@ import (
 	"github.com/topseeder1/allpaca/template"
 	"github.com/topseeder1/allpaca/thinking"
 	"github.com/topseeder1/allpaca/types/model"
-	"github.com/topseeder1/allpaca/version"
 	"github.com/topseeder1/allpaca/x/imagegen/transfer"
 )
 
@@ -44,6 +43,24 @@ var (
 	errCapabilityImage      = errors.New("image generation")
 	errInsecureProtocol     = errors.New("insecure protocol http")
 )
+
+// ollamaComClientVersion is the version reported to ollama.com in the
+// User-Agent header. ollama.com version-gates model pulls by parsing this
+// value; Allpaca's own version (derived from `git describe`) will always be
+// behind any current upstream Ollama release, so pulls of newer models fail
+// with HTTP 412 "requires a newer version of Ollama".
+//
+// Reporting a recent upstream version here clears that gate. Models that need
+// a manifest schema or a backend this fork does not implement will still fail
+// when the manifest is parsed or the model is loaded — that is the correct
+// error surface for those cases, and it happens after download rather than as
+// a misleading version rejection.
+//
+// Bump this when ollama.com raises its minimums. 0.99.0 is deliberately high
+// within the 0.x line so it clears any current minimum with headroom; semver
+// ordering means it stays below 1.0.0, where a future schema break would
+// actually need real work instead of a constant bump.
+const ollamaComClientVersion = "0.99.0"
 
 type registryOptions struct {
 	Insecure bool
@@ -923,7 +940,9 @@ func makeRequest(ctx context.Context, method string, requestURL *url.URL, header
 		}
 	}
 
-	req.Header.Set("User-Agent", fmt.Sprintf("ollama/%s (%s %s) Go/%s", version.Version, runtime.GOARCH, runtime.GOOS, runtime.Version()))
+	// Report a recent upstream Ollama version so ollama.com's pull version
+	// gate does not reject Allpaca. See ollamaComClientVersion above.
+	req.Header.Set("User-Agent", fmt.Sprintf("ollama/%s (%s %s) Go/%s", ollamaComClientVersion, runtime.GOARCH, runtime.GOOS, runtime.Version()))
 
 	if s := req.Header.Get("Content-Length"); s != "" {
 		contentLength, err := strconv.ParseInt(s, 10, 64)

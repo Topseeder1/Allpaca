@@ -291,6 +291,7 @@ func (s *Server) Handler() http.Handler {
 	ollamaProxy := s.ollamaProxy()
 	mux.Handle("GET /api/tags", ollamaProxy)
 	mux.Handle("POST /api/show", ollamaProxy)
+	mux.Handle("POST /api/pull", ollamaProxy)
 	mux.Handle("GET /api/version", ollamaProxy)
 	mux.Handle("HEAD /api/version", ollamaProxy)
 	mux.Handle("POST /api/me", ollamaProxy)
@@ -1938,7 +1939,7 @@ func (s *Server) buildChatRequest(chat *store.Chat, model string, think any, ava
 	}
 
 	if len(availableTools) > 0 {
-		tools := make(api.Tools, len(availableTools))
+		tools := make([]api.Tool, len(availableTools))
 		for i, toolSchema := range availableTools {
 			tools[i] = convertToOllamaTool(toolSchema)
 		}

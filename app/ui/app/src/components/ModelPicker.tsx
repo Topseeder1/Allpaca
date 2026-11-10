@@ -8,17 +8,13 @@ import {
 } from "react";
 import { Model } from "@/gotypes";
 import { useSelectedModel } from "@/hooks/useSelectedModel";
-import { useSettings } from "@/hooks/useSettings";
+import { usePullModel } from "@/hooks/usePullModel";
 import { useQueryClient } from "@tanstack/react-query";
 import { getModelUpstreamInfo } from "@/api";
 import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 
 const stalenessCheckCache = new Map<string, number>();
 
-// OriginBadge shows which models directory a model was resolved from:
-// "allpaca" (ALLPACA_MODELS) or "ollama" (OLLAMA_MODELS). The value is emitted
-// by the server on /api/tags and carried through getModels() in api.ts.
-// Display-only — it has no effect on selection.
 function OriginBadge({ origin }: { origin?: string }) {
   if (!origin) return null;
 
@@ -61,14 +57,19 @@ export const ModelPicker = forwardRef<
     chatId,
     searchQuery,
   );
-  const { settings } = useSettings();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const { pull, pulls, errors } = usePullModel();
   const modelListRef = useRef<{
     scrollToSelectedModel: () => void;
     scrollToTop: () => void;
   }>(null);
+
+  // Cloud models cannot run in Allpaca: there are no local weights to
+  // download, and the fork never signs in to ollama.com. Showing them in the
+  // picker with a download arrow is a dead end, so they are dropped entirely.
+  const localModels = models.filter((model) => !model.isCloud());
 
   const checkModelStaleness = async (model: Model) => {
     if (
@@ -228,7 +229,7 @@ export const ModelPicker = forwardRef<
         </svg>
       </button>
       {isOpen && (
-        <div className="absolute right-0 text-[15px] bottom-full mb-2 z-50 w-64 rounded-2xl overflow-hidden bg-surface-raised border border-border text-fg shadow-xl shadow-black/5 backdrop-blur-lg dark:ring-black/20">
+        <div className="absolute right-0 text-[15px] bottom-full mb-2 z-50 w-72 rounded-2xl overflow-hidden bg-surface-raised border border-border text-fg shadow-xl shadow-black/5 backdrop-blur-lg dark:ring-black/20">
           <div className="px-1 py-2 border-b border-border">
             <input
               ref={searchInputRef}
@@ -243,11 +244,13 @@ export const ModelPicker = forwardRef<
 
           <ModelList
             ref={modelListRef}
-            models={models}
+            models={localModels}
             selectedModel={selectedModel}
             onModelSelect={handleModelSelect}
-            airplaneMode={settings.airplaneMode}
             isOpen={isOpen}
+            pulls={pulls}
+            errors={errors}
+            onPull={pull}
           />
         </div>
       )}
@@ -260,14 +263,18 @@ export const ModelList = forwardRef(function ModelList(
     models,
     selectedModel,
     onModelSelect,
-    airplaneMode,
     isOpen,
+    pulls,
+    errors,
+    onPull,
   }: {
     models: Model[];
     selectedModel: Model | null;
     onModelSelect: (model: Model) => void;
-    airplaneMode: boolean;
     isOpen: boolean;
+    pulls: Record<string, import("@/hooks/usePullModel").PullProgress>;
+    errors: Record<string, string>;
+    onPull: (modelName: string) => void;
   },
   ref,
 ): JSX.Element {
@@ -344,45 +351,80 @@ export const ModelList = forwardRef(function ModelList(
       className="h-64 overflow-y-auto overflow-x-hidden"
     >
       {models.length === 0 ? (
-        <div className="px-3 py-2 text-fg-muted">
-          No models found
-        </div>
+        <div className="px-3 py-2 text-fg-muted">No models found</div>
       ) : (
         models.map((model, index) => {
+          const progress = pulls[model.model];
+          const error = errors[model.model];
+          const isPulling = progress !== undefined;
+          // Only models that aren't on disk get a download control.
+          const needsDownload = model.digest === undefined;
+
           return (
-            <div key={`${model.model}-${model.digest || "no-digest"}-${index}`}>
+            <div
+              key={`${model.model}-${model.digest || "no-digest"}-${index}`}
+              onMouseEnter={() => setHighlightedIndex(index)}
+              className={`flex w-full items-center hover:bg-surface-hover ${
+                highlightedIndex === index ||
+                selectedModel?.model === model.model
+                  ? "bg-surface-hover"
+                  : ""
+              }`}
+            >
               <button
                 onClick={() => onModelSelect(model)}
-                onMouseEnter={() => setHighlightedIndex(index)}
-                className={`flex w-full items-center gap-2 px-3 py-2 hover:bg-surface-hover focus:outline-none cursor-pointer ${
-                  highlightedIndex === index ||
-                  selectedModel?.model === model.model
-                    ? "bg-surface-hover"
-                    : ""
-                }`}
+                className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left focus:outline-none cursor-pointer"
               >
-                <span className="flex flex-1 items-center gap-1.5 min-w-0 text-left">
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
                   <span className="truncate">{model.model}</span>
                   <OriginBadge origin={model.origin} />
                 </span>
-                {model.isCloud() && (
-                  <svg
-                    className="h-3 fill-current text-fg-muted"
-                    viewBox="0 0 20 15"
-                    strokeWidth={1}
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path d="M4.01511 14.5861H14.2304C16.9183 14.5861 19.0002 12.5509 19.0002 9.9403C19.0002 7.30491 16.8911 5.3046 14.0203 5.3046C12.9691 3.23016 11.0602 2 8.69505 2C5.62816 2 3.04822 4.32758 2.72935 7.47455C1.12954 7.95356 0.0766602 9.29431 0.0766602 10.9757C0.0766602 12.9913 1.55776 14.5861 4.01511 14.5861ZM4.02056 13.1261C2.46452 13.1261 1.53673 12.2938 1.53673 11.0161C1.53673 9.91553 2.24207 9.12934 3.51367 8.79302C3.95684 8.68258 4.11901 8.48427 4.16138 8.00729C4.39317 5.3613 6.29581 3.46007 8.69505 3.46007C10.5231 3.46007 11.955 4.48273 12.8385 6.26013C13.0338 6.65439 13.2626 6.7882 13.7488 6.7882C16.1671 6.7882 17.5337 8.19719 17.5337 9.97707C17.5337 11.7526 16.1242 13.1261 14.2852 13.1261H4.02056Z" />
-                  </svg>
-                )}
-                {model.digest === undefined &&
-                  (airplaneMode || !model.isCloud()) && (
+              </button>
+
+              {needsDownload && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onPull(model.model);
+                  }}
+                  disabled={isPulling}
+                  title={
+                    isPulling
+                      ? progress.status === "downloading"
+                        ? `Downloading ${progress.percent.toFixed(0)}%`
+                        : progress.status
+                      : "Download this model now"
+                  }
+                  aria-label={
+                    isPulling ? "Downloading model" : "Download this model"
+                  }
+                  className="mr-2 flex h-6 shrink-0 items-center justify-center rounded-md px-1.5 text-fg-muted hover:text-fg focus:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-default disabled:opacity-70"
+                >
+                  {isPulling ? (
+                    <span className="text-[11px] tabular-nums">
+                      {progress.total > 0
+                        ? `${Math.round(progress.percent)}%`
+                        : "…"}
+                    </span>
+                  ) : (
                     <ArrowDownTrayIcon
-                      className="h-4 w-4 text-fg-muted"
+                      className="h-4 w-4"
                       strokeWidth={1.75}
                     />
                   )}
-              </button>
+                </button>
+              )}
+
+              {error && (
+                <span
+                  title={error}
+                  className="mr-2 shrink-0 text-[11px] text-red-500"
+                >
+                  !
+                </span>
+              )}
             </div>
           );
         })
